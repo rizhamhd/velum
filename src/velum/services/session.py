@@ -201,7 +201,7 @@ class Session:
             self.machine.set(State.CONNECTED)
             self.retries = 0
         except Exception:
-            self.retries += 1
+            self.retries = min(self.retries + 1, 6)
             self.retry_at = time.time() + min(60, 5 * 2 ** self.retries)
             self.machine.lost('VPN tunnel lost; protection retained. Automatic reconnect will retry.')
 

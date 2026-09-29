@@ -69,6 +69,7 @@ class Window(QMainWindow):
         self.client = client or Client(self)
         self.client.received.connect(self.update_status)
         self.client.failure.connect(self.error)
+        self.tray = None
         self.last_status = 'DISCONNECTED'
         self.last_report = []
         self.records = []
@@ -161,7 +162,11 @@ class Window(QMainWindow):
         self.tray = None
 
     def reload(self):
-        self.records = self.store.list()
+        try:
+            self.records = self.store.list()
+        except Exception as exc:
+            self.error('Cannot read saved profiles: ' + str(exc))
+            return
         self.profiles.setRowCount(len(self.records))
         for row, item in enumerate(self.records):
             p = parse_vless(item['uri'])

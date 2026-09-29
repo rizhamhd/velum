@@ -35,5 +35,10 @@ package() {
   install -Dm644 assets/org.velum.Velum.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.velum.Velum.svg"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -d "$pkgdir/usr/share/doc/$pkgname/docs"
+  cp -r docs/. "$pkgdir/usr/share/doc/$pkgname/docs/"
+  for document in CONTRIBUTING.md SECURITY.md CHANGELOG.md; do
+    install -Dm644 "$document" "$pkgdir/usr/share/doc/$pkgname/$document"
+  done
   install -Dm755 scripts/recover.sh "$pkgdir/usr/lib/velum/recover"
 }

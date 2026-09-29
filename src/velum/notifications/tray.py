@@ -6,6 +6,7 @@ class Tray:
     def __init__(self, window):
         self.window = window
         self.last = None
+        self.last_notice = None
         self.icon = QSystemTrayIcon(window)
         menu = QMenu(window)
         menu.addAction('Connect', window.connect_vpn)
@@ -59,7 +60,12 @@ class Tray:
         self.icon.setIcon(QIcon(pixmap))
         self.icon.setToolTip('Velum: ' + state)
         key = (state, error)
-        if key != self.last and state in ('CONNECTED', 'DISCONNECTED', 'ERROR') and self.last:
+        if state in ('CONNECTED', 'DISCONNECTED', 'ERROR') and key != self.last_notice:
+            previous = self.last_notice
+            self.last_notice = key
+            if previous is None:
+                self.last = key
+                return
             self.icon.showMessage('Velum', error or {
                 'CONNECTED': 'VPN connected successfully; routing verified',
                 'DISCONNECTED': 'VPN disconnected', 'ERROR': 'VPN tunnel lost; check diagnostics',

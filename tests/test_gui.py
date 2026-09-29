@@ -31,3 +31,21 @@ class GuiTests(unittest.TestCase):
             self.assertIn('ERROR', window.summary.text())
             window.close()
             app.processEvents()
+
+    def test_tray_notifications_ignore_transient_rechecks(self):
+        from unittest.mock import Mock
+
+        from velum.notifications.tray import Tray
+        app = QApplication.instance() or QApplication([])
+        tray = Tray.__new__(Tray)
+        tray.icon, tray.last, tray.last_notice = Mock(), None, None
+        tray.update('DISCONNECTED')
+        tray.update('CONNECTED')
+        tray.update('VERIFYING')
+        tray.update('CONNECTED')
+        self.assertEqual(tray.icon.showMessage.call_count, 1)
+        tray.update('ERROR', 'Tunnel lost')
+        tray.update('RECONNECTING')
+        tray.update('ERROR', 'Tunnel lost')
+        self.assertEqual(tray.icon.showMessage.call_count, 2)
+        app.processEvents()

@@ -5,6 +5,7 @@ import select
 import signal
 import socket
 import sys
+import time
 from pathlib import Path
 
 from velum.security.authorization import authorize
@@ -45,6 +46,7 @@ def main():
         except TimeoutError:
             continue
         authorized = False
+        authentication_deadline = time.monotonic() + 10
         buffer = b''
         connection.settimeout(10)
 
@@ -54,6 +56,8 @@ def main():
         session.notify = send
         try:
             while not stopping:
+                if not authorized and time.monotonic() > authentication_deadline:
+                    break
                 ready, _, _ = select.select([connection], [], [], 2)
                 if not ready:
                     if not authorized:
