@@ -78,7 +78,7 @@ allow alternative package providers. Never substitute badvpn-tun2socks.
 For an already-built local package:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-1-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-2-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
@@ -113,8 +113,9 @@ resolvectl status
 systemctl status systemd-resolved
 ```
 
-Expected resolver target: `/run/systemd/resolve/stub-resolv.conf`, containing
-`nameserver 127.0.0.53`. Other setups are refused without modification. Follow
+The sole configured nameserver must be `127.0.0.53`, with resolved and its stub
+listener running. Both stub symlinks and NetworkManager-generated regular files
+are supported. External or mixed resolver lists are refused without modification. Follow
 your distribution's resolved/NetworkManager setup guidance if migration is
 needed; Velum does not replace `/etc/resolv.conf` automatically.
 

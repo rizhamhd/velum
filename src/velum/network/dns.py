@@ -1,3 +1,4 @@
+import socket
 from pathlib import Path
 
 from velum.network.system import NetworkError
@@ -10,14 +11,26 @@ class ResolvedDNS:
         self.resolv_conf = resolv_conf
 
     def preflight(self):
-        target = str(self.resolv_conf.resolve())
-        text = self.resolv_conf.read_text()
-        servers = [line.split()[1] for line in text.splitlines()
-                   if line.strip().startswith('nameserver ') and len(line.split()) > 1]
-        if target != '/run/systemd/resolve/stub-resolv.conf' or servers != ['127.0.0.53']:
-            raise NetworkError('Unsupported DNS manager. Enable systemd-resolved and its stub '
-                               'resolver (NetworkManager may delegate to resolved). No DNS files were changed.')
+        # NetworkManager may write a regular resolv.conf that points exclusively
+        # to resolved. Its effective nameservers matter, not the symlink target.
+        servers = []
+        for line in self.resolv_conf.read_text().splitlines():
+            fields = line.split('#', 1)[0].split(';', 1)[0].split()
+            if fields and fields[0] == 'nameserver':
+                if len(fields) != 2:
+                    raise NetworkError('Invalid nameserver entry in /etc/resolv.conf; no DNS files were changed')
+                servers.append(fields[1])
+        if servers != ['127.0.0.53']:
+            raise NetworkError('Unsupported DNS configuration. All system DNS must use the '
+                               'systemd-resolved stub at 127.0.0.53. NetworkManager-managed files '
+                               'and stub symlinks are supported. No DNS files were changed.')
         self.runner.run('/usr/bin/resolvectl', 'status')
+        try:
+            with socket.create_connection(('127.0.0.53', 53), timeout=2):
+                pass
+        except OSError as exc:
+            raise NetworkError('systemd-resolved is available, but its DNS stub at 127.0.0.53:53 '
+                               'is not reachable. Check DNSStubListener; no DNS files were changed.') from exc
 
     def configure(self):
         self.tx.apply(['/usr/bin/resolvectl', 'dns', TUN, '1.1.1.1', '9.9.9.9'],

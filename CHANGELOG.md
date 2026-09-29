@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-2 — DNS compatibility fix
+
+- Accept NetworkManager-generated regular resolv.conf files pointing exclusively
+  to the running systemd-resolved stub. Keep external/mixed resolver rejection.
+- Add regression coverage for regular files, symlinks, and unreachable stubs.
+
 ## 0.1.0 — Unreleased
 
 - Add strict VLESS TCP/WebSocket and TLS parsing with original-URI preservation.

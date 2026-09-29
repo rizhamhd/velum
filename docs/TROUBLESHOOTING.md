@@ -48,8 +48,9 @@ resolvectl query example.com
 nmcli general status
 ```
 
-Only resolved's actual stub symlink with 127.0.0.53 is supported. A plain file,
-NetworkManager-generated resolv.conf, resolvconf, or another stub is refused.
+Both regular NetworkManager-generated files and symlinks are supported when
+127.0.0.53 is the sole nameserver and the resolved stub is reachable. External
+resolvers, mixed resolver lists, and unreachable stub listeners are refused.
 Configure resolved according to distro documentation first. No automatic resolver
 migration is attempted. Do not replace resolv.conf merely to silence an error.
 

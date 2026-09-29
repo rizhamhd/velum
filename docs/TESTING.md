@@ -5,7 +5,7 @@
 Environment: CachyOS, Python 3.14.7, PySide6 6.11.2, Xray 26.3.27,
 xjasonlyu/tun2socks 2.6.0. No real provider credentials were used.
 
-- Unit/offscreen suite: 45 tests passed in the final unit/offscreen suite.
+- Unit/offscreen suite: 49 tests passed in the final unit/offscreen suite.
 - Ruff: passed.
 - Installed Xray validated generated TCP/none, TCP/TLS, WebSocket/none, and
   WebSocket/TLS configurations using its actual `run -test` command.
