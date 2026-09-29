@@ -1,0 +1,11 @@
+[Unit]
+Description=Velum authenticated local control socket
+
+[Socket]
+ListenStream=/run/velum.sock
+SocketMode=0666
+RemoveOnStop=yes
+Backlog=4
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Velum VPN Manager
+Comment=Manage VLESS profiles and verified full-device tunnels
+Exec=velum
+Icon=org.velum.Velum
+Terminal=false
+Categories=Network;Qt;
+StartupNotify=true
