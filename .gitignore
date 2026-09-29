@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+*.pkg.tar.*
+pkg/
+profiles*.json
+*.log
+.env
