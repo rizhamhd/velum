@@ -4,6 +4,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 from velum.gui.window import Window
+from velum.notifications.tray import Tray
 
 
 def main():
@@ -14,6 +15,7 @@ def main():
     app.setApplicationName('Velum')
     app.setDesktopFileName('org.velum.Velum')
     window = Window()
+    window.tray = Tray(window)
     window.show()
     return app.exec()
 
