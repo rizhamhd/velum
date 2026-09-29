@@ -21,8 +21,13 @@ class Transaction:
         for command in reversed(self.undo):
             try:
                 self.runner.run(*command)
-            except Exception:
-                failures.append(command)
+            except Exception as exc:
+                # The write-ahead entry may exist even when creation never succeeded,
+                # or hotplug may already have removed the owned interface/route.
+                absent = ('No such process', 'No such file or directory', 'Cannot find device',
+                          'does not exist', 'Failed to resolve interface')
+                if not any(message in str(exc) for message in absent):
+                    failures.append(command)
         self.undo = list(reversed(failures))
         if failures:
             private_write(self.path, {'undo': self.undo})

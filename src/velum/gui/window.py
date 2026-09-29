@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -29,8 +30,11 @@ from PySide6.QtWidgets import (
 
 from velum.config.profiles import ProfileStore
 from velum.config.vless import parse_vless
+from velum.security.files import private_write
+from velum.security.logging import event
 from velum.security.redact import redact
 from velum.services.client import Client
+from velum.vpn.configuration import generate_config
 
 
 class ProfileDialog(QDialog):
@@ -94,7 +98,10 @@ class Window(QMainWindow):
         self.profiles.setEditTriggers(QTableWidget.NoEditTriggers)
         self.profiles.setContextMenuPolicy(Qt.CustomContextMenu)
         self.profiles.customContextMenuRequested.connect(self.context_menu)
-        self.profiles.horizontalHeader().setStretchLastSection(True)
+        self.profiles.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.profiles.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.profiles.setAlternatingRowColors(True)
+        self.profiles.verticalHeader().hide()
         layout.addWidget(self.profiles)
         actions = QHBoxLayout()
         for label, action in [('Add / Import VLESS', self.add_profile), ('Edit', self.edit_profile),
@@ -221,6 +228,15 @@ class Window(QMainWindow):
                 except Exception as exc:
                     self.error(str(exc))
 
+    def export_xray(self):
+        if item := self.selected():
+            path, _ = QFileDialog.getSaveFileName(self, 'Export sensitive Xray configuration', 'xray.json', 'JSON (*.json)')
+            if path:
+                try:
+                    private_write(Path(path), generate_config(parse_vless(item['uri'])))
+                except Exception as exc:
+                    self.error(str(exc))
+
     def import_file(self):
         path, _ = QFileDialog.getOpenFileName(self, 'Import profiles', '', 'JSON (*.json)')
         if path:
@@ -234,7 +250,8 @@ class Window(QMainWindow):
         menu = QMenu(self)
         for label, action in [('Connect', self.connect_vpn), ('Edit', self.edit_profile),
                               ('Rename', self.rename), ('Duplicate', self.duplicate),
-                              ('Share / Copy URL', self.copy_url), ('Export', self.export_profile),
+                              ('Share / Copy URL', self.copy_url), ('Export profile', self.export_profile),
+                              ('Export Xray JSON', self.export_xray),
                               ('Delete', self.delete)]:
             menu.addAction(label, action)
         menu.exec(self.profiles.viewport().mapToGlobal(position))
@@ -271,14 +288,14 @@ class Window(QMainWindow):
                              f"Original IP: {data.get('original_ip', '—')}\n"
                              f"VPN IP: {data.get('vpn_ip', '—')}\n"
                              f"Tunnel: {data.get('tunnel', '—')}\n"
-                             f"Latency: {data.get('latency_ms', '—')} ms")
+                             f"Latency: {data.get('latency_ms', '—')} ms\n"
+                             f"Core: {data.get('engine_version', 'Not inspected')}")
         if 'checks' in data:
             self.last_report = data['checks']
             self.diagnostics.setPlainText('\n'.join(
                 f"{c['status']:12} {c['name']}: {c['detail']}" for c in self.last_report))
         self.hotspot_status.setText(data.get('hotspot', 'NOT ENABLED'))
-        self.logs.append(redact(json.dumps({'level': 'ERROR' if data.get('error') else 'INFO',
-                                           'state': state, 'message': data.get('error', '')})))
+        self.logs.insertPlainText(event('ERROR' if data.get('error') else 'INFO', data.get('error', state), state=state) + '\n')
         if self.tray:
             self.tray.update(state, data.get('error', ''))
         if data.get('error'):
@@ -287,7 +304,7 @@ class Window(QMainWindow):
     def error(self, message):
         self.last_status = 'ERROR'
         self.summary.setText('ERROR — protection is not verified\n' + redact(message))
-        self.logs.append(redact(json.dumps({'level': 'ERROR', 'message': message})))
+        self.logs.insertPlainText(event('ERROR', message) + '\n')
         self.statusBar().showMessage(redact(message))
         if self.tray:
             self.tray.update('ERROR', redact(message))

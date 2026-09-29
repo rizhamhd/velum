@@ -19,6 +19,17 @@ def migrate(data):
     raise ConfigurationError('Unsupported profile database version')
 
 
+def profile_record(uri, name=None, profile_id=None):
+    parsed = parse_vless(uri)
+    if name is not None and not isinstance(name, str):
+        raise ConfigurationError('Profile name must be text')
+    name = parsed.name if name is None else name.strip()
+    if not name or len(name) > 200 or any(ord(c) < 32 or ord(c) == 127 for c in name):
+        raise ConfigurationError('Name must contain 1–200 printable characters')
+    return {'id': profile_id or str(uuid4()), 'name': name, 'uri': uri,
+            'normalized': parsed.normalized()}
+
+
 class ProfileStore:
     def __init__(self, path: Path):
         self.path = path
@@ -42,16 +53,11 @@ class ProfileStore:
         return data['profiles']
 
     def save(self, uri, name=None, profile_id=None):
-        parsed = parse_vless(uri)
-        name = parsed.name if name is None else name.strip()
-        if not name or len(name) > 200 or any(ord(c) < 32 for c in name):
-            raise ConfigurationError('Name must contain 1–200 printable characters')
+        record = profile_record(uri, name, profile_id)
         with self.locked():
             records = self.list()
             if profile_id and not any(p['id'] == profile_id for p in records):
                 raise ConfigurationError('Profile no longer exists')
-            record = {'id': profile_id or str(uuid4()), 'name': name, 'uri': uri,
-                      'normalized': parsed.normalized()}
             records = [p for p in records if p['id'] != record['id']] + [record]
             private_write(self.path, {'version': 1, 'profiles': records})
         return record
@@ -63,15 +69,17 @@ class ProfileStore:
 
     def duplicate(self, profile_id):
         item = next(p for p in self.list() if p['id'] == profile_id)
-        return self.save(item['uri'], item['name'] + ' (copy)')
+        return self.save(item['uri'], item['name'][:193] + ' (copy)')
 
     def export(self, profile_id, path):
         item = next(p for p in self.list() if p['id'] == profile_id)
         private_write(Path(path), {'version': 1, 'profiles': [item]})
 
     def import_file(self, path):
+        if Path(path).stat().st_size > 1024 * 1024:
+            raise ConfigurationError('Profile import exceeds the 1 MiB size limit')
         data = migrate(json.loads(Path(path).read_text()))
-        # Validate the entire document before performing any writes.
-        for item in data['profiles']:
-            parse_vless(item['uri'])
-        return [self.save(item['uri'], item.get('name')) for item in data['profiles']]
+        records = [profile_record(item['uri'], item.get('name')) for item in data['profiles']]
+        with self.locked():
+            private_write(self.path, {'version': 1, 'profiles': self.list() + records})
+        return records

@@ -8,6 +8,7 @@ from velum.vpn.configuration import MARK, SOCKS_PORT
 TABLE = '28672'
 RULE = '11000'
 BYPASS = '10999'
+ENDPOINT = '10998'
 TUN = 'vpn0'
 
 
@@ -22,7 +23,7 @@ class Tunnel:
         if any(p['ifname'] == TUN for p in links):
             raise NetworkError('vpn0 already exists; refusing to change an unowned interface')
         rules = self.runner.json('/usr/bin/ip', '-j', '-4', 'rule', 'show')
-        if any(str(p.get('priority')) in (RULE, BYPASS) for p in rules):
+        if any(str(p.get('priority')) in (RULE, BYPASS, ENDPOINT) for p in rules):
             raise NetworkError('Reserved routing priorities are already in use')
         # Refuse custom policy routing: VPN coexistence requires an explicit adapter.
         if any(p.get('priority') not in (0, 32766, 32767) for p in rules):
@@ -43,6 +44,10 @@ class Tunnel:
         route += ['dev', upstream.interface, 'proto', '186']
         self.tx.apply(route, ['/usr/bin/ip', '-4', 'route', 'del', server + '/32',
                               'dev', upstream.interface, 'proto', '186'])
+        self.tx.apply(['/usr/bin/ip', '-4', 'rule', 'add', 'priority', ENDPOINT,
+                       'to', server + '/32', 'lookup', 'main'],
+                      ['/usr/bin/ip', '-4', 'rule', 'del', 'priority', ENDPOINT,
+                       'to', server + '/32', 'lookup', 'main'])
         self.tx.apply(['/usr/bin/ip', 'tuntap', 'add', 'dev', TUN, 'mode', 'tun'],
                       ['/usr/bin/ip', 'link', 'del', 'dev', TUN])
         self.runner.run('/usr/bin/ip', 'addr', 'add', '198.18.0.1/30', 'dev', TUN)

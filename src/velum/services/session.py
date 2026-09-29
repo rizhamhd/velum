@@ -1,3 +1,4 @@
+import ipaddress
 import shutil
 import socket
 import time
@@ -12,6 +13,7 @@ from velum.network.hotspot import Hotspot
 from velum.network.system import NetworkError, Runner, detect_upstream
 from velum.network.transaction import Transaction
 from velum.network.tunnel import TUN, Tunnel
+from velum.security.logging import event
 from velum.vpn.engine import Xray
 
 
@@ -40,6 +42,8 @@ class Session:
         self.retry_at = 0
         self.retries = 0
         self.owner = None
+        self.preflight_checks = []
+        self.engine_version = ''
         if self.tx.undo or self.guard_tx.undo:
             self.machine.state = State.ERROR
             self.machine.error = ('A previous helper session ended unexpectedly. Existing protection is retained. '
@@ -51,9 +55,11 @@ class Session:
                 'original_ip': self.original_ip, 'vpn_ip': self.verification.vpn_ip,
                 'tunnel': TUN if self.tunnel.status() else '—', 'latency_ms': self.latency_ms,
                 'hotspot': 'Enabled; phone egress needs verification' if self.hotspot.interface and self.machine.state == State.CONNECTED else 'NOT ENABLED',
-                'checks': self.verification.report()}
+                'checks': self.preflight_checks + self.verification.report(),
+                'engine_version': self.engine_version}
 
     def emit(self):
+        print(event("ERROR" if self.machine.error else "INFO", self.machine.error or str(self.machine.state)), flush=True)
         self.notify(self.status())
 
     def validate_settings(self, settings):
@@ -72,7 +78,14 @@ class Session:
         if self.machine.state != State.DISCONNECTED:
             raise RuntimeError('Disconnect or recover the previous session first')
         self.validate_settings(settings)
-        self.profile = parse_vless(uri)
+        profile = parse_vless(uri)
+        try:
+            address = ipaddress.ip_address(profile.server)
+        except ValueError:
+            address = None
+        if address and address.version == 6:
+            raise ValueError('IPv6-only provider endpoints are unsupported; choose an IPv4-capable endpoint')
+        self.profile = profile
         self.settings = settings
         self.retries = 0
         actions = {
@@ -88,21 +101,34 @@ class Session:
         self.emit()
 
     def validate(self):
+        self.preflight_checks = []
         for binary in ('xray', 'tun2socks', 'ip', 'nft', 'resolvectl', 'curl', 'sysctl'):
             if not shutil.which(binary, path='/usr/bin:/usr/sbin'):
                 raise NetworkError(f'Required program is missing: {binary}. See installation instructions.')
         self.engine.validate_config(self.profile)
+        self.engine_version = self.engine.version()
+        self.preflight_checks.append({'name': 'VLESS configuration', 'status': 'PASS',
+                                      'detail': 'Strict parser and installed Xray validation passed'})
         self.upstream = detect_upstream(self.runner)
         self.tunnel.preflight()
         self.firewall.preflight()
         self.dns.preflight()
         if self.settings.get('hotspot'):
             self.hotspot.preflight(self.settings['hotspot'], self.upstream)
-        records = socket.getaddrinfo(self.profile.server, self.profile.port, socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            records = socket.getaddrinfo(self.profile.server, self.profile.port, socket.AF_INET, socket.SOCK_STREAM)
+        except socket.gaierror as exc:
+            raise NetworkError('Provider DNS resolution failed; this release needs an IPv4-capable endpoint') from exc
         self.server = records[0][4][0]
+        self.preflight_checks.append({'name': 'Server DNS resolution', 'status': 'PASS',
+                                      'detail': 'Provider endpoint resolved to IPv4'})
         start = time.monotonic()
         with socket.create_connection((self.server, self.profile.port), timeout=5):
             self.latency_ms = round((time.monotonic() - start) * 1000)
+        self.preflight_checks.append({'name': 'Server reachability', 'status': 'PASS',
+                                      'detail': f'TCP connection established in {self.latency_ms} ms'})
+        self.preflight_checks.append({'name': 'Default route', 'status': 'PASS',
+                                      'detail': 'Physical upstream preserved: ' + self.upstream.interface})
         self.engine.validate_config(self.profile, self.server)
         self.original_ip = IPVerifier(self.runner).observe()
 
@@ -124,7 +150,11 @@ class Session:
     def verify(self):
         self.last_verify = time.time()
         result = self.verification.run(self.original_ip, self.settings.get('expect_change', True),
-                                       bool(self.hotspot.interface))
+                                       self.hotspot if self.hotspot.interface else None)
+        if self.profile and self.profile.security == 'tls':
+            from velum.diagnostics.verification import Check
+            self.verification.results.append(Check('TLS', 'PASS' if result else 'FAIL',
+                'Certificate verification is enforced by Xray; successful tunnel egress required'))
         self.emit()
         return result
 
@@ -189,6 +219,10 @@ class Session:
             if (not self.engine.status() or not self.tunnel.status()
                     or detect_upstream(self.runner) != self.upstream):
                 raise NetworkError('VPN process or upstream changed')
+            if not self.firewall.verify() or not self.dns.verify():
+                raise NetworkError('DNS or firewall protection changed')
+            if self.runner.json('/usr/bin/ip', '-j', '-4', 'route', 'get', '1.1.1.1')[0].get('dev') != TUN:
+                raise NetworkError('System routing no longer uses the tunnel')
             if resumed or now - self.last_verify > 60:
                 self.machine.set(State.VERIFYING)
                 if not self.verify():

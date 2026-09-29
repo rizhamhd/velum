@@ -40,3 +40,11 @@ class Hotspot:
             if old != '1':
                 self.tx.apply(['/usr/bin/sysctl', '-w', key + '=1'],
                               ['/usr/bin/sysctl', '-w', key + '=' + old])
+
+    def verify(self):
+        routes = self.runner.json('/usr/bin/ip', '-j', '-4', 'route', 'show', 'table', TABLE)
+        route_ok = any(r.get('dst') == self.subnet and r.get('dev') == self.interface for r in routes)
+        forwarding = all(self.runner.run('/usr/bin/sysctl', '-n',
+                         f'net.ipv4.conf.{interface}.forwarding').strip() == '1'
+                         for interface in (self.interface, TUN))
+        return route_ok and forwarding and self.interface in hotspot_interfaces(self.runner)

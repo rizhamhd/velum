@@ -25,6 +25,7 @@ class VerificationTests(unittest.TestCase):
         runner = Mock()
         runner.json.return_value = [{'dev': 'vpn0'}]
         v = Verification(runner, Mock(), Mock(), Mock(), Mock())
+        v.policy_valid = Mock(return_value=True)
         self.assertFalse(v.run('8.8.8.8'))
         self.assertTrue(v.run('1.1.1.1'))
 
@@ -35,3 +36,14 @@ class VerificationTests(unittest.TestCase):
         v = Verification(runner, Mock(), Mock(), Mock(), Mock())
         self.assertFalse(v.run('1.1.1.1'))
         self.assertTrue(any('not being routed' in c.detail for c in v.results))
+
+    def test_policy_rejects_extra_rule(self):
+        runner = Mock()
+        routes = [{'dst': 'default', 'dev': 'vpn0'}]
+        rules = [{'priority': priority, 'table': 28672 if priority == 11000 else 254}
+                 for priority in (0, 10998, 10999, 11000, 32766, 32767)]
+        runner.json.side_effect = [routes, rules]
+        v = Verification(runner, Mock(), Mock(), Mock(), Mock())
+        self.assertTrue(v.policy_valid())
+        runner.json.side_effect = [routes, rules + [{'priority': 11000, 'table': 254}]]
+        self.assertFalse(v.policy_valid())

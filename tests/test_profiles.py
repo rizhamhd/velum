@@ -31,3 +31,13 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(migrate({'version': 0, 'uris': [BASE]})['version'], 1)
         with self.assertRaises(ValueError):
             migrate({'version': 99})
+
+    def test_import_is_atomic(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = ProfileStore(Path(d) / 'profiles.json')
+            source = Path(d) / 'import.json'
+            source.write_text(json.dumps({'version': 1, 'profiles': [
+                {'uri': BASE, 'name': 'Valid'}, {'uri': BASE, 'name': ''}]}))
+            with self.assertRaises(ValueError):
+                store.import_file(source)
+            self.assertEqual(store.list(), [])

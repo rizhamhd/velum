@@ -37,3 +37,13 @@ class TransactionTests(unittest.TestCase):
         self.assertIn('fwmark', commands[1])
         self.assertEqual(commands[-1][-1], '28672')
         self.assertFalse(any('replace' in cmd for cmd in commands))
+
+    def test_missing_owned_resource_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as d:
+            runner = Mock()
+            path = Path(d) / 'journal.json'
+            tx = Transaction(runner, path)
+            tx.apply(['add'], ['delete'])
+            runner.run.side_effect = RuntimeError('RTNETLINK answers: No such process')
+            tx.rollback()
+            self.assertFalse(path.exists())

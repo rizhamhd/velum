@@ -3,14 +3,15 @@ import os
 import tempfile
 from pathlib import Path
 
-from velum.network.firewall import Firewall
+from velum.network.firewall import Firewall, ruleset
 from velum.network.system import Runner, Upstream
 from velum.network.transaction import Transaction
 from velum.network.tunnel import Tunnel
 
 
 def main():
-    if os.geteuid() != 0 or os.readlink('/proc/self/ns/net') == os.readlink('/proc/1/ns/net'):
+    if (os.geteuid() != 0 or not os.environ.get('VELUM_ORIGINAL_NETNS')
+            or os.readlink('/proc/self/ns/net') == os.environ['VELUM_ORIGINAL_NETNS']):
         raise SystemExit('Refusing to run outside an isolated root network namespace')
     runner = Runner()
     runner.run('/usr/bin/ip', 'link', 'set', 'lo', 'up')
@@ -27,6 +28,10 @@ def main():
         try:
             tunnel.preflight()
             firewall.preflight()
+            for mode in ('OFF', 'VPN only', 'VPN + hotspot'):
+                runner.run('/usr/bin/nft', '--check', '-f', '-',
+                           input=ruleset('192.0.2.20', 443, mode, 'hotspot0'))
+            print('PASS: kernel validates all hotspot/kill-switch rule variants', flush=True)
             firewall.configure('192.0.2.20', 443)
             assert firewall.verify()
             print('PASS: nftables creation and rule verification')
@@ -46,7 +51,9 @@ def main():
         tables = runner.json('/usr/bin/nft', '-j', 'list', 'tables')['nftables']
         assert any(x.get('table', {}).get('name') == 'unrelated_test' for x in tables)
         assert not any(x.get('table', {}).get('name') == 'velum_vpn' for x in tables)
-        print('PASS: route/TUN/nftables rollback; unrelated table preserved')
+        print('PASS: route/TUN/nftables rollback; unrelated table preserved', flush=True)
+    from integration_dataplane import main as test_dataplane
+    test_dataplane()
 
 
 if __name__ == '__main__':

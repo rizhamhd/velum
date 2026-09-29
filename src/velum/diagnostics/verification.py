@@ -2,7 +2,7 @@ import ipaddress
 import socket
 from dataclasses import asdict, dataclass
 
-from velum.network.tunnel import TUN
+from velum.network.tunnel import BYPASS, ENDPOINT, RULE, TABLE, TUN
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,7 @@ class Verification:
 
     def run(self, original_ip, expect_change=True, hotspot=False):
         self.results = []
+        self.vpn_ip = ''
 
         def check(name, test, detail):
             try:
@@ -73,6 +74,7 @@ class Verification:
             '/usr/bin/ip', '-j', '-4', 'route', 'get', target)[0].get('dev') == TUN
             for target in ('1.1.1.1', '9.9.9.9', '8.8.8.8')),
             'Ordinary unmarked application route lookup must use vpn0')
+        check('Routing policy', self.policy_valid, 'Dedicated default route and policy priorities are intact')
         check('DNS protection', self.dns.verify, 'Resolved stub and tunnel DNS domain are active')
         check('IPv6 protection', self.firewall.verify, 'Owned firewall matches installed protection rules')
         check('DNS resolution', lambda: bool(socket.getaddrinfo('api.ipify.org', 443, socket.AF_INET)),
@@ -91,10 +93,20 @@ class Verification:
         if not route_ok:
             self.results.append(Check('Routing safety', 'FAIL',
                 'VPN engine is running, but traffic is not being routed through the tunnel.'))
-        self.results.append(Check('Hotspot forwarding', 'PASS' if hotspot and self.firewall.verify()
-                                  else 'NOT ENABLED',
-                                  'Laptop rules only; verify phone egress separately' if hotspot else 'Disabled'))
+        if hotspot:
+            check('Hotspot forwarding', lambda: hotspot.verify() and self.firewall.verify(),
+                  'Laptop forwarding, return route and firewall; verify phone egress separately')
+        else:
+            self.results.append(Check('Hotspot forwarding', 'NOT ENABLED', 'Disabled'))
         return all(c.status in ('PASS', 'NOT ENABLED') for c in self.results)
+
+    def policy_valid(self):
+        routes = self.runner.json('/usr/bin/ip', '-j', '-4', 'route', 'show', 'table', TABLE)
+        rules = self.runner.json('/usr/bin/ip', '-j', '-4', 'rule', 'show')
+        priorities = {int(rule['priority']) for rule in rules}
+        return (len(rules) == 6 and priorities == {0, int(ENDPOINT), int(BYPASS), int(RULE), 32766, 32767}
+                and any(route.get('dst') == 'default' and route.get('dev') == TUN for route in routes)
+                and any(str(rule.get('priority')) == RULE and str(rule.get('table')) == TABLE for rule in rules))
 
     def report(self):
         return [asdict(c) for c in self.results]

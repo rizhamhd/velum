@@ -15,10 +15,13 @@ class Client(QObject):
         self.pending = []
         self.socket.connected.connect(self.flush)
         self.socket.readyRead.connect(self.read)
-        self.socket.errorOccurred.connect(lambda _: self.failure.emit(
-            'Privileged service unavailable. Install the package and enable velum.socket.'))
+        self.socket.errorOccurred.connect(self.socket_error)
         self.socket.disconnected.connect(lambda: self.failure.emit(
             'Backend connection lost. Protection is unknown; inspect diagnostics before using the network.'))
+
+    def socket_error(self, _):
+        self.pending.clear()
+        self.failure.emit("Privileged service unavailable. Install the package and enable velum.socket.")
 
     def send(self, operation, **data):
         self.pending.append({'operation': operation, **data})

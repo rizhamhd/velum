@@ -45,3 +45,11 @@ class SessionTests(unittest.TestCase):
         run.return_value.returncode = 1
         with self.assertRaises(PermissionError):
             authorize(Mock())
+
+    def test_ipv6_endpoint_rejected_before_mutations(self):
+        with tempfile.TemporaryDirectory() as d:
+            runner = Mock()
+            session = Session(Path(d), runner=runner)
+            with self.assertRaisesRegex(ValueError, 'IPv6-only'):
+                session.connect(BASE.replace('example.invalid', '[2001:db8::1]'), {})
+            runner.run.assert_not_called()
