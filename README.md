@@ -6,8 +6,9 @@ Arch Linux, KDE Plasma, and systemd. MIT licensed.
 
 **0.1.0 is a development release, not a production-certified VPN.** Real TCP/UDP
 traffic through Xray/VLESS, IPv6 blocking, kill-switch behavior, and rollback have
-passed isolated Linux namespace tests. Paid-provider, desktop Polkit/resolved,
-sleep/hotplug, and physical hotspot acceptance still need live validation.
+passed isolated Linux namespace tests. An authorized live WebSocket/TLS provider session also passed Polkit/resolved
+setup and independent non-root egress verification. Sleep/hotplug and physical
+hotspot acceptance still need live validation.
 See [test evidence and release gates](docs/TESTING.md).
 
 This is only a client. Obtain your own service legally. No provider credentials,
@@ -243,8 +244,8 @@ has been validated.
 
 ## Current limitations
 
-- No live paid-provider, KDE Polkit, systemd-resolved, physical-hotspot, or
-  suspend/hotplug acceptance certification yet.
+- Live provider testing covers one WebSocket/TLS profile; physical-hotspot and
+  suspend/hotplug acceptance remain unverified.
 - IPv4-capable upstream/provider required; IPv6 URLs parse, but IPv6-only endpoints
   cannot connect. IPv6 traffic is blocked instead of tunneled.
 - Only TCP/WebSocket with none/TLS; REALITY, XHTTP, gRPC, flow, subscriptions,

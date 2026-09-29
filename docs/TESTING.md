@@ -3,7 +3,8 @@
 ## Executed in the development workspace
 
 Environment: CachyOS, Python 3.14.7, PySide6 6.11.2, Xray 26.3.27,
-xjasonlyu/tun2socks 2.6.0. No real provider credentials were used.
+xjasonlyu/tun2socks 2.6.0. Automated namespace tests use dummy credentials. A subsequent authorized live
+WebSocket/TLS provider test used a private profile outside the checkout.
 
 - Unit/offscreen suite: 49 tests passed in the final unit/offscreen suite.
 - Ruff: passed.
@@ -27,6 +28,22 @@ xjasonlyu/tun2socks 2.6.0. No real provider credentials were used.
 The initial sudo-root attempt could not run because interactive sudo authentication
 was required. The equivalent tests succeeded using root-mapped user namespaces
 outside the tool sandbox. They did not install the service or mutate host routes.
+
+## Authorized live smoke test (2026-09-29)
+
+The installed 0.1.0-2 package passed Polkit authorization and setup against the
+machine's actual NetworkManager-generated regular resolv.conf and resolved stub.
+The supplied profile initially failed TLS certificate-name validation; a separate
+profile with SNI matching the server certificate passed without allowInsecure.
+The original private profile was preserved. No provider credentials are in Git.
+
+The full-device session reached CONNECTED with all applicable diagnostics passing:
+Xray, TUN, routing policy, DNS protection/resolution, IPv6 protection, HTTPS
+connectivity, and changed IPv4 egress. An independent ordinary non-root process
+confirmed its public address changed and matched the helper's VPN egress. The
+test explicitly disconnected afterward and completed rollback. This is one
+WebSocket/TLS profile, not certification of every provider or network environment.
+Hotspot sharing was disabled during this test.
 
 ## Normal development checks
 
@@ -53,7 +70,7 @@ The script records the original namespace identity, unshares networking, and
 refuses execution if isolation is missing. The suite creates only dummy lab
 credentials. It never contacts a paid provider or public internet endpoint.
 
-## Mandatory live release acceptance (NOT YET EXECUTED)
+## Remaining live release acceptance
 
 Use a disposable CachyOS/Arch test machine first. Install the package through
 pacman, run the GUI as an ordinary active desktop user, and confirm Polkit
