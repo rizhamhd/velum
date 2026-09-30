@@ -8,7 +8,10 @@ def generate_config(profile: Vless, server_ip: str | None = None):
     stream = {'network': profile.transport, 'security': profile.security,
               'sockopt': {'mark': MARK}}
     if profile.security == 'tls':
-        tls = {'serverName': profile.sni or profile.server, 'allowInsecure': False}
+        tls = {'serverName': profile.sni or profile.server,
+               'allowInsecure': False}
+        if profile.certificate_name:
+            tls['verifyPeerCertByName'] = profile.certificate_name
         if profile.alpn:
             tls['alpn'] = list(profile.alpn)
         if profile.fingerprint:

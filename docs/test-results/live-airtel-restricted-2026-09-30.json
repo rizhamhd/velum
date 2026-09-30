@@ -1,0 +1,70 @@
+{
+  "passed": true,
+  "checked_at": "2026-09-30T05:43:03.996135+00:00",
+  "cycles": 1,
+  "hold_seconds": 0,
+  "baseline_public_ip_checked": false,
+  "baseline_ipv6_reachable": false,
+  "checks": [
+    {
+      "check": "Connection cycle 1 reached CONNECTED",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Independent non-root HTTPS egress matches helper",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Ordinary UDP DNS query succeeds through protected routing",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "IPv6 outbound connection is blocked",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "GUI and helper checks agree",
+      "status": "PASS",
+      "detail": "VLESS configuration, Server DNS resolution, Server reachability, Default route, Xray core, TUN interface, VPN route, Routing policy, DNS protection, IPv6 protection, DNS resolution, Internet connectivity, IPv4 egress, TLS"
+    },
+    {
+      "check": "Independent non-root HTTPS egress matches helper",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Ordinary UDP DNS query succeeds through protected routing",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "IPv6 outbound connection is blocked",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "GUI and helper checks agree",
+      "status": "PASS",
+      "detail": "VLESS configuration, Server DNS resolution, Server reachability, Default route, Xray core, TUN interface, VPN route, Routing policy, DNS protection, IPv6 protection, DNS resolution, Internet connectivity, IPv4 egress, TLS"
+    },
+    {
+      "check": "Explicit diagnostics passed for cycle 1",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Explicit disconnect completed",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "Original routes and DNS settings restored",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

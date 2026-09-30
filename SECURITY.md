@@ -19,6 +19,12 @@ permissions. They are not a replacement for disk encryption or account security.
 The clipboard is intentionally sensitive when explicitly copying a URL. Secrets
 are redacted from application logs; raw engine logs are discarded.
 
+TLS certificate verification stays enabled. Profiles may specify one explicit
+`verifyPeerCertByName` hostname separately from the SNI. This changes the expected
+server identity, so use a hostname supplied by the provider. Empty means the
+usual SNI/server identity. `allowInsecure=true` is rejected because the tested
+Xray backend removed it; it is never silently translated into another mode.
+
 Kill-switch guarantees are session-scoped and require a non-OFF mode. Graceful
 exit, GUI crash, and explicit recovery restore normal networking. Abrupt helper
 failure holds the app's firewall until recovery or reboot. Other privileged tools

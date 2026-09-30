@@ -26,6 +26,8 @@ Qt follows your desktop palette. The screenshot is not evidence of a live VPN.
 
 - Strict VLESS TCP and WebSocket import, with or without TLS. SNI, ALPN,
   fingerprint, WebSocket host/path, names, and original URIs are preserved.
+- Optional certificate hostname separate from SNI, using Xray's
+  `verifyPeerCertByName`; certificate verification remains enabled.
 - Unknown, duplicate, invalid, or inapplicable options produce explicit errors.
 - Add, edit, rename, duplicate, delete with confirmation, share/copy URL, import
   and export profile JSON, and export Xray JSON. Credentials are masked by default.
@@ -79,7 +81,7 @@ allow alternative package providers. Never substitute badvpn-tun2socks.
 For an already-built local package:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-2-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-5-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
@@ -132,8 +134,24 @@ needed; Velum does not replace `/etc/resolv.conf` automatically.
    TCP connection latency, not ICMP ping.
 
 A normal remote VPN must change your public IP. The setting requiring this is on
-by default. Disable it only when a same-egress deployment is intentional; all
-other checks still apply. Two independent HTTPS IP services must agree.
+by default and checks your original IP before connecting, using your physical
+connection's data allowance. For an app-specific data package without general
+internet access, turn off **Require public IP to change** to skip that pre-VPN
+HTTPS check. This choice is saved across app restarts and also supports intentional
+same-egress deployments. All tunnel routing, DNS, firewall, and connectivity
+checks still apply, and two independent
+HTTPS IP services must agree through the tunnel. The original IP is unavailable
+in this mode, so a before/after comparison is not performed. Endpoint DNS and TCP
+setup still use the physical connection. Velum cannot determine which ISP
+allowance is charged; a successful VPN check does not verify package billing.
+
+If your provider requires an SNI different from its certificate hostname, use
+**Edit → Verify certificate for** to set the provider's certificate hostname.
+The SNI, WebSocket Host/path, and other link options stay unchanged. Leaving this
+field blank retains normal SNI/server certificate checks. This setting is saved
+in the URL as `verifyPeerCertByName` and included in profile/Xray exports. The
+tested Xray 26.3.27 rejects `allowInsecure=true`; Velum reports this explicitly
+instead of silently ignoring it or changing SNI.
 
 Imported credentials live in `$XDG_CONFIG_HOME/velum/profiles.json` (default
 `~/.config/velum/profiles.json`). Exported profiles/Xray JSON contain credentials.
@@ -238,6 +256,10 @@ sudo ./scripts/integration.sh --root-network-namespace
 ./scripts/integration.sh --user-network-namespace
 ```
 
+For repeatable acceptance with your own saved profile, see
+[the live GUI test](docs/TESTING.md#repeatable-live-gui-acceptance). It exercises
+the installed service, ordinary TCP/UDP traffic, reconnect, and network restoration.
+
 Other modern Linux distributions need equivalent dependencies and installation of
 the supplied systemd/Polkit files into their native paths; no non-Arch installer
 has been validated.
@@ -253,7 +275,8 @@ has been validated.
   are rejected or unavailable.
 - Reconnect retries the pinned endpoint address. If provider DNS changes, use
   explicit reconnect to resolve it again.
-- No automatic hotspot creation, configurable LAN bypass, settings persistence,
+- No automatic hotspot creation, configurable LAN bypass, persistence of settings
+  other than the pre-VPN public-IP check,
   per-app split tunneling, or sing-box implementation yet.
 - Hotspot diagnostics validate laptop configuration, not a phone's observed IP.
 

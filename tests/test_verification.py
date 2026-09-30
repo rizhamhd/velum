@@ -30,6 +30,23 @@ class VerificationTests(unittest.TestCase):
         self.assertTrue(v.run('1.1.1.1'))
 
     @patch('velum.diagnostics.verification.socket.getaddrinfo', return_value=[1])
+    @patch('velum.diagnostics.verification.IPVerifier.observe', return_value='8.8.8.8')
+    def test_no_baseline_still_requires_tunnel_and_https_checks(self, observe, dns):
+        runner = Mock()
+        runner.json.return_value = [{'dev': 'vpn0'}]
+        v = Verification(runner, Mock(), Mock(), Mock(), Mock())
+        v.policy_valid = Mock(return_value=True)
+        self.assertTrue(v.run('', expect_change=False))
+        observe.assert_called_once_with()
+        self.assertEqual(v.vpn_ip, '8.8.8.8')
+        observe.side_effect = RuntimeError('No tunnel internet access')
+        self.assertFalse(v.run('', expect_change=False))
+        observe.reset_mock()
+        runner.json.return_value = [{'dev': 'eth0'}]
+        self.assertFalse(v.run('', expect_change=False))
+        observe.assert_not_called()
+
+    @patch('velum.diagnostics.verification.socket.getaddrinfo', return_value=[1])
     def test_wrong_route_fails(self, dns):
         runner = Mock()
         runner.json.return_value = [{'dev': 'wlp2s0'}]

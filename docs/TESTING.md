@@ -1,12 +1,44 @@
 # Test evidence and release gates
 
+## Airtel profile with pre-VPN checks disabled (2026-09-30)
+
+After restarting the installed 0.1.0-5 service, the saved YouTube-SNI profile with
+a separate certificate hostname passed full-device live acceptance using
+`scripts/live-test.py --restricted-data --cycles 1 --hold-seconds 0` plus the
+private profile ID and explicit network-change option. Direct public-IP probes
+before connection and after disconnect were skipped for the restricted package.
+
+The [sanitized report](test-results/live-airtel-restricted-2026-09-30.json) records
+successful connection, independent non-root HTTPS egress matching the helper,
+ordinary UDP DNS, IPv6 blocking, repeated diagnostics, and restoration of routes
+and DNS after disconnect. This run did not measure a before/after IP change,
+long-term stability, hotspot traffic, or ISP allowance accounting.
+
+Earlier attempts failed during tunnel verification, independent HTTPS egress
+checking, and waiting for the helper. The final successful run demonstrates
+current connectivity; it does not establish the cause of every earlier failure.
+
+## Separate certificate hostname (2026-09-30)
+
+The 0.1.0-4 source passed 60 unit tests and Ruff, including real Xray 26.3.27
+configuration validation for TCP/WebSocket with a separate certificate hostname.
+Regression coverage includes unchanged SNI/path encoding, strict option parsing,
+GUI edit/save/import/export, and TLS diagnostics retaining failed connection status.
+
+A temporary unprivileged Xray SOCKS probe used the original private YouTube-SNI
+profile plus the certificate hostname from its previously verified counterpart.
+Both independent HTTPS egress services succeeded and agreed through that proxy.
+No host routes were changed. This confirms provider transport compatibility;
+it does not establish full-device routing or Airtel data-allowance accounting.
+
 ## Executed in the development workspace
 
 Environment: CachyOS, Python 3.14.7, PySide6 6.11.2, Xray 26.3.27,
 xjasonlyu/tun2socks 2.6.0. Automated namespace tests use dummy credentials. A subsequent authorized live
 WebSocket/TLS provider test used a private profile outside the checkout.
 
-- Unit/offscreen suite: 49 tests passed in the final unit/offscreen suite.
+- Unit/offscreen suite: 53 tests passed, including recovery/backoff and protection
+  retention after engine loss or failed periodic verification.
 - Ruff: passed.
 - Installed Xray validated generated TCP/none, TCP/TLS, WebSocket/none, and
   WebSocket/TLS configurations using its actual `run -test` command.
@@ -45,6 +77,37 @@ test explicitly disconnected afterward and completed rollback. This is one
 WebSocket/TLS profile, not certification of every provider or network environment.
 Hotspot sharing was disabled during this test.
 
+## Live GUI acceptance rerun (2026-09-30)
+
+The actual Qt window/client and installed 0.1.0-2 helper passed a complete rerun
+using the same private WebSocket/TLS profile with corrected SNI. The original
+profile still fails a separate standard TLS probe with a certificate hostname
+mismatch. Neither saved profile was changed and TLS verification stayed enabled.
+
+The [sanitized final report](test-results/live-2026-09-30.json) records 27 passing
+checks and zero failures:
+
+- Connect and explicit reconnect both reached CONNECTED with all applicable
+  helper diagnostics passing, including TLS and changed IPv4 egress.
+- Independent ordinary non-root HTTPS traffic agreed with the helper's VPN IP.
+- Ordinary UDP DNS requests succeeded through protected routing.
+- The connection stayed healthy for 90 seconds, including automatic verification.
+- Explicit disconnect restored the original main routes, policy rules,
+  resolv.conf contents, resolved DNS/domain settings, and public IPv4.
+- IPv6 probes failed while connected. The physical uplink had no baseline IPv6
+  reachability, so the isolated namespace test remains the evidence of IPv6 blocking.
+
+Two earlier runs prompted acceptance-harness improvements: extra diagnostics reset
+the periodic timer, and an immediate restoration comparison differed from baseline.
+The final harness disables manual window controls
+and waits at most 10 seconds for exact restoration, reporting mismatching
+components if it does not settle. It does not waive failed network checks.
+
+The isolated real-kernel TCP/UDP, IPv6, kill-switch, and rollback suite was also
+rerun successfully. The local 53-test suite, Ruff, Python compilation, and systemd
+unit verification passed. Physical hotspot, suspend/hotplug, and independent
+security review remain release gates.
+
 ## Normal development checks
 
 ```sh
@@ -57,6 +120,53 @@ makepkg --force --noconfirm
 The unit suite never changes host networking. Engine validation is skipped if
 Xray is absent; GUI tests are skipped if PySide6 is absent. CI does not install
 Xray automatically, so local engine and namespace test evidence remains distinct.
+
+## Repeatable live GUI acceptance
+
+The live test uses the actual Qt window/client and the installed Polkit helper.
+Close other Velum windows first. Run as your ordinary desktop user. The test
+temporarily routes the machine through the selected saved VPN, then disconnects
+and compares routes, policy rules, DNS configuration, and public IPv4 with their
+original values. The original profile is never edited.
+
+List profile IDs without exposing their URLs or credentials:
+
+```sh
+PYTHONPATH=src python - <<'PY'
+import os
+from pathlib import Path
+from velum.config.profiles import ProfileStore
+config = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'velum'
+for profile in ProfileStore(config / 'profiles.json').list():
+    print(profile['id'], profile['name'])
+PY
+```
+
+Substitute the chosen ID for `PROFILE_ID`:
+
+```sh
+PYTHONPATH=src python scripts/live-test.py --profile-id PROFILE_ID \
+  --allow-network-changes --cycles 2 --hold-seconds 90 \
+  --report /tmp/velum-live-acceptance.json --visible
+```
+
+The test checks changed egress with independent ordinary non-root HTTPS probes,
+a UDP DNS query, an IPv6 connection attempt, explicit diagnostics, periodic
+verification, and reconnect. The visible window's controls are temporarily disabled
+to prevent manual actions from changing the automated test sequence. Omit
+`--visible` to render Qt offscreen. Reports contain outcomes without profile URLs,
+credentials, or public IP addresses, and are written with mode 0600.
+Network restoration allows up to 10 seconds for asynchronous link-removal updates;
+a remaining mismatch identifies the affected component and fails the test.
+
+An IPv6 connection failure on an IPv4-only uplink is not by itself proof of IPv6
+protection. The isolated dataplane test separately establishes IPv6 reachability
+before confirming that protection blocks it. Live tests do not replace packet
+capture for DNS leak checks or physical hotspot and suspend/hotplug acceptance.
+
+If a live check fails, the test attempts an explicit disconnect and checks network
+restoration before returning a nonzero exit status. A cleanup failure is reported
+separately and needs inspection using the recovery guide.
 
 ## Explicit namespace integration
 

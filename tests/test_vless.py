@@ -1,11 +1,38 @@
 import unittest
 
-from velum.config.vless import ConfigurationError, parse_vless
+from velum.config.vless import ConfigurationError, parse_vless, with_certificate_name
 
 BASE = 'vless://00000000-0000-4000-8000-000000000001@example.invalid:443'
 
 
 class ParserTests(unittest.TestCase):
+    def test_certificate_name_is_explicit_and_tls_only(self):
+        self.assertEqual(parse_vless(BASE + '?security=tls').certificate_name, '')
+        p = parse_vless(BASE + '?security=tls&verifyPeerCertByName=cert.example.invalid')
+        self.assertEqual(p.certificate_name, 'cert.example.invalid')
+        for query in ('verifyPeerCertByName=example.invalid',
+                      'security=tls&verifyPeerCertByName=',
+                      'security=tls&verifyPeerCertByName=FromMitM',
+                      'security=tls&verifyPeerCertByName=a,b',
+                      'security=tls&verifyPeerCertByName=a&verifyPeerCertByName=b',
+                      'security=tls&allowInsecure=1', 'security=tls&allowInsecure=true',
+                      'security=tls&allowInsecure=yes', 'security=tls&allowInsecure='):
+            with self.subTest(query=query), self.assertRaises(ConfigurationError):
+                parse_vless(BASE + '?' + query)
+
+    def test_certificate_name_preserves_sni_transport_and_url_encoding(self):
+        uri = BASE + '?security=tls&type=ws&sni=youtube.com&host=ws.example.invalid&path=%2fa%3Fed%3D2048#My%20VPN'
+        updated = with_certificate_name(uri, 'cert.example.invalid')
+        self.assertEqual(updated, uri.replace('#', '&verifyPeerCertByName=cert.example.invalid#'))
+        self.assertEqual(with_certificate_name(updated, 'cert.example.invalid'), updated)
+        self.assertEqual(with_certificate_name(updated, ''), uri)
+        self.assertEqual(parse_vless(updated).sni, 'youtube.com')
+        self.assertEqual(with_certificate_name(BASE, ''), BASE)
+        with self.assertRaises(ConfigurationError):
+            with_certificate_name(BASE, 'cert.example.invalid')
+        encoded = uri.replace('#', '&%76erifyPeerCertByName=old.example.invalid#')
+        self.assertEqual(with_certificate_name(encoded, 'cert.example.invalid'), updated)
+
     def test_minimal(self):
         p = parse_vless(BASE)
         self.assertEqual((p.server, p.port, p.transport), ('example.invalid', 443, 'tcp'))

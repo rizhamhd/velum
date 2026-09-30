@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from velum.config.profiles import ProfileStore
-from velum.config.vless import parse_vless
+from velum.config.vless import ConfigurationError, parse_vless, with_certificate_name
 from velum.security.files import private_write
 from velum.security.logging import event
 from velum.security.redact import redact
@@ -53,10 +53,32 @@ class ProfileDialog(QDialog):
         layout.addRow('Name (optional)', self.name)
         layout.addRow('VLESS URL', self.uri)
         layout.addRow(reveal)
+        self.certificate_name = QLineEdit()
+        self.certificate_name.setPlaceholderText('Optional: provider’s certificate hostname')
+        layout.addRow('Verify certificate for', self.certificate_name)
+        self.tls_notice = QLabel('Leave blank to verify against the SNI. Set the provider’s certificate\n'
+                                'hostname to keep a different SNI with certificate verification enabled.')
+        self.tls_notice.setWordWrap(True)
+        layout.addRow(self.tls_notice)
+        self.uri.textChanged.connect(self.sync_tls_option)
+        self.sync_tls_option()
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
+
+    def sync_tls_option(self):
+        try:
+            profile = parse_vless(self.uri.text())
+        except ConfigurationError:
+            self.certificate_name.clear()
+            self.certificate_name.setEnabled(False)
+        else:
+            self.certificate_name.setEnabled(profile.security == 'tls')
+            self.certificate_name.setText(profile.certificate_name)
+
+    def profile_uri(self):
+        return with_certificate_name(self.uri.text(), self.certificate_name.text())
 
 
 class Window(QMainWindow):
@@ -66,6 +88,7 @@ class Window(QMainWindow):
         self.resize(1060, 740)
         config = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'velum'
         self.store = store or ProfileStore(config / 'profiles.json')
+        self.preferences_path = self.store.path.with_name('settings.json')
         self.client = client or Client(self)
         self.client.received.connect(self.update_status)
         self.client.failure.connect(self.error)
@@ -92,8 +115,8 @@ class Window(QMainWindow):
             button.clicked.connect(action)
             buttons.addWidget(button)
         layout.addLayout(buttons)
-        self.profiles = QTableWidget(0, 7)
-        self.profiles.setHorizontalHeaderLabels(['Name', 'Server', 'Port', 'Protocol', 'Transport', 'TLS', 'SNI'])
+        self.profiles = QTableWidget(0, 8)
+        self.profiles.setHorizontalHeaderLabels(['Name', 'Server', 'Port', 'Protocol', 'Transport', 'TLS', 'SNI', 'Certificate name'])
         self.profiles.setSelectionBehavior(QTableWidget.SelectRows)
         self.profiles.setSelectionMode(QTableWidget.SingleSelection)
         self.profiles.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -139,12 +162,21 @@ class Window(QMainWindow):
         self.kill.addItems(['VPN only', 'VPN + hotspot', 'OFF'])
         self.expect_change = QCheckBox('Require public IP to change')
         self.expect_change.setChecked(True)
+        self.expect_change.setToolTip(
+            'Checks your public IP before connecting, which can use regular ISP data. '
+            'Turn off for connections with only an app-specific data package. '
+            'Tunnel routing and internet connectivity are still verified.')
         self.ipv6 = QComboBox()
         self.ipv6.addItem('Block IPv6 temporarily (safe default)', 'block')
         self.ipv6.addItem('Tunnel IPv6 (not supported in this release)', 'tunnel')
         form.addRow('Kill switch', self.kill)
         form.addRow('IPv6', self.ipv6)
         form.addRow(self.expect_change)
+        package_help = QLabel('Uses regular data for a public-IP check before connecting.\n'
+                              'Turn off to check internet access only after the VPN starts.\n'
+                              'Velum cannot verify which ISP data allowance is charged.')
+        package_help.setWordWrap(True)
+        form.addRow(package_help)
         form.addRow(QLabel('Settings apply on the next connection.\nLocal LAN bypass is disabled in this release.'))
         self.tabs.addTab(settings, 'Settings')
         hotspot = QWidget()
@@ -158,8 +190,28 @@ class Window(QMainWindow):
         hform.addRow(self.hotspot_status)
         hform.addRow(QLabel('Create the hotspot in KDE Network Settings first.\nSharing never disables the upstream connection.'))
         self.tabs.addTab(hotspot, 'Hotspot')
+        self.load_preferences()
+        self.expect_change.toggled.connect(self.save_preferences)
         self.reload()
         self.tray = None
+
+    def load_preferences(self):
+        try:
+            if self.preferences_path.exists():
+                data = json.loads(self.preferences_path.read_text())
+                if (not isinstance(data, dict) or data.get('version') != 1
+                        or not isinstance(data.get('expect_change'), bool)):
+                    raise ValueError('Invalid public-IP check preference')
+                self.expect_change.setChecked(data['expect_change'])
+        except (OSError, ValueError) as exc:
+            self.error('Cannot read saved settings: ' + str(exc))
+
+    def save_preferences(self):
+        try:
+            private_write(self.preferences_path, {'version': 1,
+                          'expect_change': self.expect_change.isChecked()})
+        except OSError as exc:
+            self.error('Cannot save settings: ' + str(exc))
 
     def reload(self):
         try:
@@ -171,7 +223,7 @@ class Window(QMainWindow):
         for row, item in enumerate(self.records):
             p = parse_vless(item['uri'])
             for col, value in enumerate([item['name'], p.server, p.port, 'VLESS', p.transport,
-                                          p.security, p.sni]):
+                                          p.security, p.sni, p.certificate_name or 'Same as SNI/server']):
                 self.profiles.setItem(row, col, QTableWidgetItem(str(value)))
         if self.records:
             self.profiles.selectRow(0)
@@ -184,7 +236,7 @@ class Window(QMainWindow):
         dialog = ProfileDialog(self, item)
         if dialog.exec() == QDialog.Accepted:
             try:
-                self.store.save(dialog.uri.text(), dialog.name.text() or None,
+                self.store.save(dialog.profile_uri(), dialog.name.text() or None,
                                 item['id'] if item else None)
                 self.reload()
             except Exception as exc:
@@ -290,7 +342,7 @@ class Window(QMainWindow):
         state = data.get('state', self.last_status)
         self.last_status = state
         self.summary.setText(f"{state}\nInternet: {data.get('upstream', '—')}\n"
-                             f"Original IP: {data.get('original_ip', '—')}\n"
+                             f"Original IP: {data.get('original_ip') or 'Not measured'}\n"
                              f"VPN IP: {data.get('vpn_ip', '—')}\n"
                              f"Tunnel: {data.get('tunnel', '—')}\n"
                              f"Latency: {data.get('latency_ms', '—')} ms\n"

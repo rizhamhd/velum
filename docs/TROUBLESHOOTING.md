@@ -56,12 +56,47 @@ migration is attempted. Do not replace resolv.conf merely to silence an error.
 
 ## TLS or connectivity fails
 
+For an app-specific data package, turn off **Require public IP to change** in
+Settings before connecting. Version 0.1.0-5 remembers this choice across restarts;
+earlier versions reset it to on whenever the GUI opened. Otherwise Velum contacts public-IP services directly
+before starting the tunnel; this can consume regular data or prevent startup if
+general internet access is unavailable. With the setting off, public-IP requests
+run only after tunnel protection checks pass. Endpoint DNS and TCP setup still
+use the physical connection. The original IP is not measured in this mode, so
+only the post-connect egress is verified, without a before/after comparison.
+An installed helper from before this fix still performs the direct check even
+with the setting off; rebuild and reinstall the package when updating source.
+
+Use the exact provider profile that works in your other client. Changing SNI to
+the VPN server's hostname changes the TLS handshake and may affect how the ISP
+classifies the connection. A successful connection, changed public IP, or passing
+diagnostics cannot establish which data allowance was charged; compare the ISP's
+usage counters. Velum does not read those counters.
+
 Check provider address/port, SNI, validity of the subscription, ALPN, system clock,
 and whether the provider supports the imported transport. Unknown `flow`, REALITY,
-XHTTP, and gRPC options are intentionally rejected. Never enable allowInsecure to
-work around certificate errors. The generated configuration always validates
-certificates. Raw Xray output is suppressed to avoid logging credentials; the GUI
+XHTTP, and gRPC options are intentionally rejected. Xray 26.3.27 rejects
+`allowInsecure=true`. When a provider uses a different SNI from its certificate,
+set **Edit → Verify certificate for** to the provider's certificate hostname.
+This emits `verifyPeerCertByName` while preserving the original SNI and still
+validating the certificate chain and configured name. Obtain the expected name
+from your provider; do not use an arbitrary hostname. Leaving the field blank
+restores normal SNI/server verification. Raw Xray output is suppressed to avoid logging credentials; the GUI
 cannot always distinguish a remote TLS failure from a dropped transport.
+
+From a development checkout, check the saved profile's certificate without
+changing host routing (find its ID using the live-test guide in TESTING.md):
+
+```sh
+PYTHONPATH=src python scripts/live-test.py --profile-id PROFILE_ID --tls-only
+```
+
+This is a standard TLS probe, not a full Xray/uTLS or provider authentication
+test, and does not support a separate certificate hostname (it refuses that mode
+explicitly). A hostname mismatch means the certificate does not cover the configured
+SNI. Confirm both the required SNI and certificate hostname with your provider;
+keep the original URL and use a separate profile for changes. A passing certificate check alone does not prove
+that the VPN account or transport works.
 
 ```sh
 timedatectl status

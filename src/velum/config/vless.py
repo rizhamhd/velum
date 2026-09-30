@@ -2,7 +2,7 @@
 import ipaddress
 import re
 from dataclasses import asdict, dataclass, field
-from urllib.parse import parse_qsl, unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, unquote_plus, urlsplit
 from uuid import UUID
 
 
@@ -43,6 +43,7 @@ class Vless:
     path: str = '/'
     host: str = ''
     parameters: dict[str, str] = field(default_factory=dict, repr=False)
+    certificate_name: str = ''
 
     def normalized(self):
         result = asdict(self)
@@ -76,7 +77,8 @@ def parse_vless(uri: str) -> Vless:
         if isinstance(exc, ConfigurationError):
             raise
         raise ConfigurationError('Invalid VLESS URL, UUID, port, or query encoding') from exc
-    allowed = {'encryption', 'security', 'sni', 'alpn', 'fp', 'type', 'path', 'host'}
+    allowed = {'encryption', 'security', 'sni', 'alpn', 'fp', 'type', 'path', 'host',
+               'allowInsecure', 'verifyPeerCertByName'}
     query = {}
     for key, value in pairs:
         if key not in allowed:
@@ -98,8 +100,17 @@ def parse_vless(uri: str) -> Vless:
         raise ConfigurationError('Unsupported VLESS encryption: use none')
     if transport != 'ws' and {'host', 'path'} & query.keys():
         raise ConfigurationError('host and path require WebSocket transport')
-    if security != 'tls' and {'sni', 'fp', 'alpn'} & query.keys():
-        raise ConfigurationError('sni, fp and alpn require TLS')
+    if security != 'tls' and {'sni', 'fp', 'alpn', 'allowInsecure', 'verifyPeerCertByName'} & query.keys():
+        raise ConfigurationError('Certificate options, sni, fp and alpn require TLS')
+    insecure = query.get('allowInsecure', '0').lower()
+    if insecure not in ('0', '1', 'false', 'true'):
+        raise ConfigurationError('allowInsecure must be 0, 1, false or true')
+    if insecure in ('1', 'true'):
+        raise ConfigurationError('This Xray backend no longer supports allowInsecure. '
+                                 'Use a provider certificate name (verifyPeerCertByName) while keeping your SNI.')
+    certificate_name = hostname(query['verifyPeerCertByName']) if 'verifyPeerCertByName' in query else ''
+    if certificate_name == 'frommitm':
+        raise ConfigurationError('A literal certificate hostname is required')
     sni = hostname(query['sni']) if query.get('sni') else ''
     host = hostname(query['host']) if query.get('host') else ''
     path = query.get('path', '/')
@@ -114,4 +125,23 @@ def parse_vless(uri: str) -> Vless:
     if len(name) > 200 or any(ord(c) < 32 or ord(c) == 127 for c in name):
         raise ConfigurationError('Profile name must be printable and at most 200 characters')
     return Vless(uri, uid, server, port, name, transport, security, 'none', sni,
-                 alpn, fp, path, host, query)
+                 alpn, fp, path, host, query, certificate_name=certificate_name)
+
+
+def with_certificate_name(uri: str, name: str) -> str:
+    """Change only this TLS option, preserving the other URL fields and encoding."""
+    profile = parse_vless(uri)
+    name = hostname(name.strip()) if name.strip() else ''
+    if profile.certificate_name == name:
+        return profile.original_uri
+    if profile.security != 'tls':
+        raise ConfigurationError('A certificate name requires TLS')
+    body, fragment_sep, fragment = profile.original_uri.partition('#')
+    address, _, query = body.partition('?')
+    parameters = [part for part in query.split('&')
+                  if unquote_plus(part.partition('=')[0]) != 'verifyPeerCertByName']
+    if name:
+        parameters.append('verifyPeerCertByName=' + name)
+    updated = address + '?' + '&'.join(parameters) + fragment_sep + fragment
+    parse_vless(updated)
+    return updated

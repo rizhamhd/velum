@@ -102,6 +102,7 @@ class Session:
 
     def validate(self):
         self.preflight_checks = []
+        self.original_ip = ''
         for binary in ('xray', 'tun2socks', 'ip', 'nft', 'resolvectl', 'curl', 'sysctl'):
             if not shutil.which(binary, path='/usr/bin:/usr/sbin'):
                 raise NetworkError(f'Required program is missing: {binary}. See installation instructions.')
@@ -130,7 +131,19 @@ class Session:
         self.preflight_checks.append({'name': 'Default route', 'status': 'PASS',
                                       'detail': 'Physical upstream preserved: ' + self.upstream.interface})
         self.engine.validate_config(self.profile, self.server)
-        self.original_ip = IPVerifier(self.runner).observe()
+        if self.settings.get('expect_change', True):
+            try:
+                self.original_ip = IPVerifier(self.runner).observe()
+            except RuntimeError as exc:
+                raise NetworkError('Pre-VPN public-IP check failed before the tunnel started. '
+                                   'For an app-specific data package, turn off Settings → '
+                                   'Require public IP to change, then connect again. '
+                                   'Tunnel connectivity checks will still run.') from exc
+            self.preflight_checks.append({'name': 'Pre-VPN public IP', 'status': 'PASS',
+                                          'detail': 'Public IP checked over the physical connection'})
+        else:
+            self.preflight_checks.append({'name': 'Pre-VPN public IP', 'status': 'NOT ENABLED',
+                                          'detail': 'Skipped; public IP will be checked only through the tunnel'})
 
     def prepare(self):
         self.firewall.configure(self.server, self.profile.port,
@@ -153,8 +166,10 @@ class Session:
                                        self.hotspot if self.hotspot.interface else None)
         if self.profile and self.profile.security == 'tls':
             from velum.diagnostics.verification import Check
-            self.verification.results.append(Check('TLS', 'PASS' if result else 'FAIL',
-                'Certificate verification is enforced by Xray; successful tunnel egress required'))
+            detail = ('Certificate verification uses the configured certificate name; original SNI preserved'
+                      if self.profile.certificate_name else
+                      'Certificate verification is enforced by Xray; successful tunnel egress required')
+            self.verification.results.append(Check('TLS', 'PASS' if result else 'FAIL', detail))
         self.emit()
         return result
 

@@ -10,3 +10,9 @@ pkg/
 profiles*.json
 *.log
 .env
+.env.*
+!.env.example
+vpn-profile*.json
+xray.json
+network.json
+firewall.json
