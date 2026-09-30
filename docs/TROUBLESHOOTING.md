@@ -1,5 +1,43 @@
 # Troubleshooting
 
+## Installation fails with 404 or PKGBUILD does not exist
+
+A pacman `.pkg.tar.zst.sig` download returning **404** means the requested file
+is missing from that mirror. Refresh the package databases with a full upgrade:
+
+```sh
+sudo pacman -Syu
+```
+
+On CachyOS, if the mirror still returns 404, rerate mirrors and refresh again:
+
+```sh
+sudo cachyos-rate-mirrors && sudo pacman -Syyu
+```
+
+Then repeat the dependency installation in the README. Keep signature checking
+enabled; a missing signature file is a download problem, not a reason to disable
+verification. See the [CachyOS FAQ](https://wiki.cachyos.org/cachyos_basic/faq/#error-404-not-found)
+and [Arch pacman troubleshooting](https://wiki.archlinux.org/title/Pacman#Troubleshooting).
+
+`ERROR: PKGBUILD does not exist` means `makepkg` is running in the wrong directory
+or the repository has not been cloned. For a fresh checkout:
+
+```sh
+git clone https://github.com/rizhamhd/velum.git && cd velum
+test -f PKGBUILD && makepkg -si
+```
+
+If the repository is already on disk, enter its existing directory instead of
+cloning again. Finish the dependencies and engine setup before building.
+
+`Unit velum.socket does not exist` and `Unknown command: velum` are expected when
+the package was never installed. After `makepkg -si` succeeds:
+
+```sh
+sudo systemctl enable --now velum.socket && velum
+```
+
 ## Service or authorization unavailable
 
 ```sh

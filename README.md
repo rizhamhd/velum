@@ -60,16 +60,30 @@ and [routing, DNS, and recovery](docs/NETWORKING.md).
 
 ## Installation: CachyOS / Arch
 
-From this repository's root:
+Run each stage only after the previous one succeeds. First update the system and
+install the build/runtime dependencies:
 
 ```sh
-sudo pacman -S --needed base-devel python pyside6 python-build python-installer \
+sudo pacman -Syu --needed git base-devel python pyside6 python-build python-installer \
   python-setuptools ruff iproute2 nftables systemd polkit curl procps-ng \
   networkmanager polkit-kde-agent
-makepkg -si
-sudo systemctl enable --now velum.socket
-velum
 ```
+
+If pacman reports a download or `.sig` **404**, fix the mirror/database problem
+before continuing. On CachyOS, rerate mirrors with `sudo cachyos-rate-mirrors`,
+then retry the command above. If the database still points to missing files,
+use `sudo pacman -Syyu` to force a refresh and perform a full upgrade. See
+[installation troubleshooting](docs/TROUBLESHOOTING.md#installation-fails-with-404-or-pkgbuild-does-not-exist).
+
+Clone the repository and enter it (Bash and current Fish both support `&&`):
+
+```sh
+git clone https://github.com/rizhamhd/velum.git && cd velum
+```
+
+If you already cloned it, enter that existing `velum` directory instead. It must
+contain `PKGBUILD`; downloading only the README or running from your home
+directory will not work.
 
 `PKGBUILD` builds the local checkout; it does not download a fictitious release.
 Review and build your own Xray and xjasonlyu/tun2socks packages first. On the
@@ -77,6 +91,18 @@ CachyOS development machine, these are provided by `xray-bin` and
 `tun2socks-bin`; package availability depends on your repositories/AUR choices.
 They are runtime prerequisites even though PKGBUILD lists them as optional to
 allow alternative package providers. Never substitute badvpn-tun2socks.
+
+After installing those engines, build and install Velum as your ordinary user:
+
+```sh
+test -f PKGBUILD && makepkg -si
+```
+
+Only after `makepkg` finishes successfully, enable the service and launch the app:
+
+```sh
+sudo systemctl enable --now velum.socket && velum
+```
 
 For an already-built local package:
 

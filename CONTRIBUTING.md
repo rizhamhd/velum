@@ -16,6 +16,6 @@ Describe which checks actually ran, not just which checks exist. Changes affecti
 protection require namespace packet tests and the relevant live release gates in
 docs/TESTING.md before production release.
 
-The repository currently has no configured upstream or release-signing identity.
-Before publishing, configure the actual repository URL, security contact/private
-reporting, and signed release process; do not invent maintainer identities.
+The upstream repository is [rizhamhd/velum](https://github.com/rizhamhd/velum).
+Use its issue tracker for non-sensitive bugs and read SECURITY.md before reporting
+vulnerabilities. Local package builds are not signed project releases.
