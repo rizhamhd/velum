@@ -17,15 +17,20 @@ The root-owned systemd socket `/run/velum.sock` is accessible to local users.
 Socket access does not grant networking authority. On the first request, the
 service obtains Linux SO_PEERCRED and checks `org.velum.manage` through Polkit,
 including the peer PID, start time, and UID. Policy defaults require an active
-local administrator authentication. The connection is the session lifetime; EOF
-triggers cleanup. Unauthorized/idle connections cannot change networking.
+local administrator authentication. The service owns the VPN session independently
+of GUI connections; EOF only detaches a GUI. Unauthorized/idle connections cannot
+change networking. The session's initiating UID controls it until explicit
+disconnect; reopening a GUI requires authorization again.
 
 Requests are newline-delimited JSON, limited to 64 KiB, with a fixed operation
 set: connect, disconnect, reconnect, diagnostics, status. Profile fields are
 strictly validated. Executable paths and command arguments are constructed by
-trusted code. One session is supported; additional clients may wait in the socket
-backlog. A future multi-client service should use explicit session ownership and
-concurrency controls, not share this object's mutable state between threads.
+trusted code. One session and up to sixteen control connections are supported.
+Requests are serialized on the service thread. Only authorized peers belonging to
+the owning UID receive session updates or control the active VPN. Closed or slow
+peers are detached without propagating socket errors into network operations.
+Request completion IDs keep GUI buttons locked across intermediate reconnect
+states. Monitoring also runs when there are no GUI connections.
 
 The service runs `/usr/bin/python -I -m velum.services.helper` from installed,
 root-owned site-packages. Python user-site and checkout imports are disabled.

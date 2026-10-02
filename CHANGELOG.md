@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-6 — Keep VPN running when the GUI closes
+
+- Keep the service session, monitoring, and recovery alive after GUI exit/crash.
+  Authenticated windows from the owning user can reopen and control the session.
+- Synchronize status, active profile, and connection settings on GUI startup.
+  Lock conflicting controls until the helper acknowledges operation completion.
+- Validate reconnect input before disconnecting; isolate broken GUI sockets from
+  network operations and fix the deleted Qt signal callback on window teardown.
+- Pass 74 unit/offscreen/local-socket tests, Ruff, and isolated real-kernel
+  TCP/UDP, IPv6 blocking, kill-switch and rollback checks. Persistence tests mock
+  networking; installed live close/reopen acceptance remains to be performed.
+
 ## 0.1.0-5 — Remember pre-VPN check preference
 
 - Persist the public-IP-change checkbox across app restarts in private settings.

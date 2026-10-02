@@ -4,6 +4,7 @@ import os
 import select
 import signal
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -13,6 +14,100 @@ from velum.security.redact import redact
 from velum.services.session import Session
 
 RUNTIME = Path('/run/velum')
+
+
+class Controller:
+    """One serialized VPN session, independent of authenticated GUI lifetimes."""
+
+    def __init__(self, session):
+        self.session = session
+        self.peers = {}
+        session.notify = self.broadcast
+
+    def add(self, peer):
+        peer.settimeout(0.2)
+        self.peers[peer] = {'uid': None, 'buffer': b'', 'deadline': time.monotonic() + 10}
+
+    def drop(self, peer):
+        self.peers.pop(peer, None)
+        peer.close()
+
+    def allowed(self, uid):
+        return uid is not None and self.session.owner in (None, uid)
+
+    def send(self, peer, data):
+        try:
+            peer.sendall((json.dumps(data) + '\n').encode())
+        except OSError:
+            # A closed/slow GUI must never interrupt network setup or cleanup.
+            self.drop(peer)
+
+    def broadcast(self, data):
+        for peer, info in list(self.peers.items()):
+            if self.allowed(info['uid']):
+                self.send(peer, data)
+
+    def request(self, peer, request):
+        if not isinstance(request, dict):
+            raise ValueError('Expected a JSON object')
+        request_id = request.get('request_id')
+        if request_id is not None and (not isinstance(request_id, str) or len(request_id) > 64):
+            raise ValueError('Invalid request ID')
+        info = self.peers[peer]
+        if info['uid'] is None:
+            info['uid'] = authorize(peer)
+        if not self.allowed(info['uid']):
+            raise PermissionError('The VPN is controlled by another user')
+        session = self.session
+        error = ''
+        try:
+            operation = request.get('operation')
+            if operation in ('connect', 'reconnect'):
+                uri, settings = request.get('uri'), request.get('settings', {})
+                # Validate replacements before disconnecting a working tunnel.
+                session.validate_request(uri, settings)
+                session.owner = info['uid']
+                if operation == 'reconnect':
+                    session.disconnect()
+                session.connect(uri, settings)
+            elif operation == 'disconnect':
+                session.disconnect()
+            elif operation == 'diagnostics':
+                if session.machine.state == 'CONNECTED' and not session.verify():
+                    session.machine.lost('Connection diagnostics failed; protection is not verified')
+            elif operation != 'status':
+                raise ValueError('Unsupported helper operation')
+        except Exception as exc:
+            error = redact(str(exc))
+        finally:
+            if session.machine.state == 'DISCONNECTED' and not session.machine.error:
+                session.owner = None
+        self.send(peer, {**session.status(), 'request_complete': request_id,
+                         'error': error or session.machine.error})
+
+    def receive(self, peer):
+        try:
+            info = self.peers[peer]
+            data = peer.recv(65536)
+            if not data:
+                self.drop(peer)
+                return
+            info['buffer'] += data
+            if len(info['buffer']) > 65536:
+                raise ValueError('Request exceeds 64 KiB limit')
+            while b'\n' in info['buffer'] and peer in self.peers:
+                line, info['buffer'] = info['buffer'].split(b'\n', 1)
+                self.request(peer, json.loads(line))
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            self.send(peer, {'state': 'ERROR', 'error': redact(str(exc)), 'control_denied': True})
+            self.drop(peer)
+
+    def tick(self):
+        for peer, info in list(self.peers.items()):
+            if info['uid'] is None and time.monotonic() > info['deadline']:
+                self.drop(peer)
+        # Monitoring/recovery continues even with no GUI or with busy clients.
+        self.session.monitor()
 
 
 def main():
@@ -31,7 +126,8 @@ def main():
     if os.environ.get('LISTEN_PID') != str(os.getpid()) or os.environ.get('LISTEN_FDS') != '1':
         raise SystemExit('Start via velum.socket; direct service launch is unsupported')
     listener = socket.socket(fileno=3)
-    listener.settimeout(2)
+    listener.setblocking(False)
+    controller = Controller(session)
     stopping = False
 
     def stop(_signum, _frame):
@@ -41,76 +137,17 @@ def main():
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     while not stopping:
-        try:
-            connection, _ = listener.accept()
-        except TimeoutError:
-            continue
-        authorized = False
-        authentication_deadline = time.monotonic() + 10
-        buffer = b''
-        connection.settimeout(10)
-
-        def send(data, peer=connection):
-            peer.sendall((json.dumps(data) + '\n').encode())
-
-        session.notify = send
-        try:
-            while not stopping:
-                if not authorized and time.monotonic() > authentication_deadline:
-                    break
-                ready, _, _ = select.select([connection], [], [], 2)
-                if not ready:
-                    if not authorized:
-                        break
-                    session.monitor()
-                    continue
-                data = connection.recv(65536)
-                if not data:
-                    break
-                buffer += data
-                if len(buffer) > 65536:
-                    raise ValueError('Request exceeds 64 KiB limit')
-                while b'\n' in buffer:
-                    line, buffer = buffer.split(b'\n', 1)
-                    request = json.loads(line)
-                    if not isinstance(request, dict):
-                        raise ValueError('Expected a JSON object')
-                    if not authorized:
-                        authorize(connection)
-                        authorized = True
-                    operation = request.get('operation')
-                    try:
-                        if operation in ('connect', 'reconnect'):
-                            if operation == 'reconnect':
-                                session.disconnect()
-                            session.connect(request['uri'], request.get('settings', {}))
-                        elif operation == 'disconnect':
-                            session.disconnect()
-                        elif operation == 'diagnostics':
-                            if session.machine.state == 'CONNECTED':
-                                if not session.verify():
-                                    session.machine.lost('Connection diagnostics failed; protection is not verified')
-                            session.emit()
-                        elif operation == 'status':
-                            session.emit()
-                        else:
-                            raise ValueError('Unsupported helper operation')
-                    except Exception as exc:
-                        send({**session.status(), 'error': redact(str(exc))})
-        except (OSError, ValueError, PermissionError) as exc:
-            try:
-                send({'state': 'ERROR', 'error': redact(str(exc))})
-            except OSError:
-                pass
-        finally:
-            session.notify = lambda _: None
-            connection.close()
-            if authorized:
-                try:
-                    session.disconnect()
-                except Exception:
-                    # Keep the journal and firewall for the next authorized recovery.
-                    print('Velum cleanup incomplete; recovery journal retained', file=sys.stderr)
+        ready, _, _ = select.select([listener, *controller.peers], [], [], 2)
+        for peer in ready:
+            if peer is listener:
+                connection, _ = listener.accept()
+                if len(controller.peers) < 16:
+                    controller.add(connection)
+                else:
+                    connection.close()
+            elif peer in controller.peers:
+                controller.receive(peer)
+        controller.tick()
     # Deliberate service stop is a disconnect. Fatal exits retain journals/rules.
     session.disconnect()
 

@@ -1,6 +1,8 @@
 import json
 import os
+from hashlib import sha256
 from pathlib import Path
+from uuid import uuid4
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -93,7 +95,11 @@ class Window(QMainWindow):
         self.client.received.connect(self.update_status)
         self.client.failure.connect(self.error)
         self.tray = None
-        self.last_status = 'DISCONNECTED'
+        self.last_status = 'UNKNOWN'
+        self.pending_request = None
+        self.pending_operation = None
+        self.control_buttons = {}
+        self.control_actions = {}
         self.last_report = []
         self.records = []
         self.tabs = QTabWidget()
@@ -104,7 +110,7 @@ class Window(QMainWindow):
         title.setStyleSheet('font-size: 30px; font-weight: 700;')
         layout.addWidget(title)
         layout.addWidget(QLabel('Full-device VLESS • Your Wi-Fi or Ethernet remains the internet transport'))
-        self.summary = QLabel('DISCONNECTED\nInternet: not inspected\nOriginal IP: —\nVPN IP: —\nTunnel: —')
+        self.summary = QLabel('Checking VPN status…')
         self.summary.setTextFormat(Qt.PlainText)
         self.summary.setStyleSheet('padding: 18px; font-size: 16px;')
         layout.addWidget(self.summary)
@@ -112,13 +118,15 @@ class Window(QMainWindow):
         for label, action in [('Connect', self.connect_vpn), ('Disconnect', self.disconnect_vpn),
                               ('Reconnect', self.reconnect), ('Run connection test', self.diagnose)]:
             button = QPushButton(label)
-            button.clicked.connect(action)
+            button.clicked.connect(lambda _checked=False, action=action: action())
+            self.control_buttons[label] = button
             buttons.addWidget(button)
         layout.addLayout(buttons)
         self.profiles = QTableWidget(0, 8)
         self.profiles.setHorizontalHeaderLabels(['Name', 'Server', 'Port', 'Protocol', 'Transport', 'TLS', 'SNI', 'Certificate name'])
         self.profiles.setSelectionBehavior(QTableWidget.SelectRows)
         self.profiles.setSelectionMode(QTableWidget.SingleSelection)
+        self.profiles.itemSelectionChanged.connect(self.update_controls)
         self.profiles.setEditTriggers(QTableWidget.NoEditTriggers)
         self.profiles.setContextMenuPolicy(Qt.CustomContextMenu)
         self.profiles.customContextMenuRequested.connect(self.context_menu)
@@ -143,6 +151,8 @@ class Window(QMainWindow):
         for title, action in [('Run Full Test', self.diagnose), ('Copy Diagnostic Report', self.copy_report)]:
             button = QPushButton(title)
             button.clicked.connect(action)
+            if title == 'Run Full Test':
+                self.control_buttons[title] = button
             dlayout.addWidget(button)
         self.tabs.addTab(diag, 'Diagnostics')
         logs_page = QWidget()
@@ -194,6 +204,7 @@ class Window(QMainWindow):
         self.expect_change.toggled.connect(self.save_preferences)
         self.reload()
         self.tray = None
+        self.update_controls()
 
     def load_preferences(self):
         try:
@@ -314,8 +325,11 @@ class Window(QMainWindow):
         menu.exec(self.profiles.viewport().mapToGlobal(position))
 
     def connect_vpn(self, reconnect=False):
+        allowed = ('CONNECTED', 'ERROR') if reconnect else ('DISCONNECTED',)
+        if self.pending_request or self.last_status not in allowed:
+            return
         if item := self.selected():
-            self.client.send('reconnect' if reconnect else 'connect', uri=item['uri'], settings={
+            self.send_operation('reconnect' if reconnect else 'connect', uri=item['uri'], settings={
                 'kill_switch': self.kill.currentText(), 'ipv6': self.ipv6.currentData(),
                 'expect_change': self.expect_change.isChecked(),
                 'hotspot': self.hotspot_interface.text().strip() if self.share.isChecked() else ''})
@@ -324,11 +338,45 @@ class Window(QMainWindow):
         self.connect_vpn(True)
 
     def disconnect_vpn(self):
-        self.client.send('disconnect')
+        if not self.pending_request and self.last_status not in ('DISCONNECTED', 'UNKNOWN'):
+            self.send_operation('disconnect')
 
     def diagnose(self):
         self.tabs.setCurrentIndex(1)
-        self.client.send('diagnostics')
+        if not self.pending_request:
+            self.send_operation('status' if self.last_status == 'UNKNOWN' else 'diagnostics')
+
+    def refresh_status(self):
+        if not self.pending_request:
+            self.send_operation('status')
+
+    def send_operation(self, operation, **data):
+        self.pending_request = uuid4().hex
+        self.pending_operation = operation
+        self.update_controls()
+        self.statusBar().showMessage({
+            'connect': 'Connecting…', 'disconnect': 'Disconnecting…',
+            'reconnect': 'Reconnecting…', 'status': 'Checking VPN status…',
+            'diagnostics': 'Testing connection…',
+        }[operation])
+        self.client.send(operation, request_id=self.pending_request, **data)
+
+    def update_controls(self):
+        idle = self.pending_request is None
+        selected = self.selected() is not None
+        enabled = {
+            'Connect': idle and selected and self.last_status == 'DISCONNECTED',
+            'Disconnect': idle and self.last_status not in ('DISCONNECTED', 'UNKNOWN'),
+            'Reconnect': idle and selected and self.last_status in ('CONNECTED', 'ERROR'),
+            'Run connection test': idle,
+            'Run Full Test': idle,
+        }
+        for label, control in [*self.control_buttons.items(), *self.control_actions.items()]:
+            control.setEnabled(enabled[label])
+
+    def closeEvent(self, event):
+        self.client.close()
+        super().closeEvent(event)
 
     def copy_report(self):
         QApplication.clipboard().setText(redact(json.dumps(self.last_report, indent=2)))
@@ -339,8 +387,30 @@ class Window(QMainWindow):
             Path(path).write_text(redact(self.logs.toPlainText()))
 
     def update_status(self, data):
+        if data.get('control_denied'):
+            self.error(data.get('error', 'Helper access denied'))
+            return
+        completed = self.pending_request and data.get('request_complete') == self.pending_request
+        if completed:
+            if self.pending_operation == 'status' and data.get('profile_key'):
+                for row, item in enumerate(self.records):
+                    if sha256(item['uri'].strip().encode()).hexdigest() == data['profile_key']:
+                        self.profiles.selectRow(row)
+                        break
+                else:
+                    self.profiles.setCurrentCell(-1, -1)
+                    self.profiles.clearSelection()
+                settings = data.get('settings', {})
+                self.kill.setCurrentText(settings.get('kill_switch', 'VPN only'))
+                self.expect_change.setChecked(settings.get('expect_change', True))
+                self.share.setChecked(bool(settings.get('hotspot')))
+                self.hotspot_interface.setText(settings.get('hotspot', ''))
+            self.pending_request = None
+            self.pending_operation = None
+            self.statusBar().clearMessage()
         state = data.get('state', self.last_status)
         self.last_status = state
+        self.update_controls()
         self.summary.setText(f"{state}\nInternet: {data.get('upstream', '—')}\n"
                              f"Original IP: {data.get('original_ip') or 'Not measured'}\n"
                              f"VPN IP: {data.get('vpn_ip', '—')}\n"
@@ -359,7 +429,10 @@ class Window(QMainWindow):
             self.statusBar().showMessage(redact(data['error']))
 
     def error(self, message):
-        self.last_status = 'ERROR'
+        self.last_status = 'UNKNOWN'
+        self.pending_request = None
+        self.pending_operation = None
+        self.update_controls()
         self.summary.setText('ERROR — protection is not verified\n' + redact(message))
         self.logs.insertPlainText(event('ERROR', message) + '\n')
         self.statusBar().showMessage(redact(message))

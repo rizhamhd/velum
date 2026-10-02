@@ -2,6 +2,7 @@ import ipaddress
 import shutil
 import socket
 import time
+from hashlib import sha256
 from pathlib import Path
 
 from velum.config.vless import parse_vless
@@ -56,7 +57,9 @@ class Session:
                 'tunnel': TUN if self.tunnel.status() else '—', 'latency_ms': self.latency_ms,
                 'hotspot': 'Enabled; phone egress needs verification' if self.hotspot.interface and self.machine.state == State.CONNECTED else 'NOT ENABLED',
                 'checks': self.preflight_checks + self.verification.report(),
-                'engine_version': self.engine_version}
+                'engine_version': self.engine_version,
+                'profile_key': sha256(self.profile.original_uri.encode()).hexdigest() if self.profile else '',
+                'settings': self.settings if self.profile else {}}
 
     def emit(self):
         print(event("ERROR" if self.machine.error else "INFO", self.machine.error or str(self.machine.state)), flush=True)
@@ -74,9 +77,7 @@ class Session:
         if not isinstance(settings.get('hotspot', ''), str):
             raise ValueError('Invalid hotspot interface')
 
-    def connect(self, uri, settings):
-        if self.machine.state != State.DISCONNECTED:
-            raise RuntimeError('Disconnect or recover the previous session first')
+    def validate_request(self, uri, settings):
         self.validate_settings(settings)
         profile = parse_vless(uri)
         try:
@@ -85,6 +86,12 @@ class Session:
             address = None
         if address and address.version == 6:
             raise ValueError('IPv6-only provider endpoints are unsupported; choose an IPv4-capable endpoint')
+        return profile
+
+    def connect(self, uri, settings):
+        if self.machine.state != State.DISCONNECTED:
+            raise RuntimeError('Disconnect or recover the previous session first')
+        profile = self.validate_request(uri, settings)
         self.profile = profile
         self.settings = settings
         self.retries = 0

@@ -47,8 +47,9 @@ pkaction --action-id org.velum.manage --verbose
 ```
 
 Install the package and enable `velum.socket`. On KDE ensure a Polkit agent is
-running. Do not run the GUI as root or loosen the Polkit policy. Only one GUI owns
-a session; close stale GUI instances. Helper code comes from the installed
+running. Do not run the GUI as root or loosen the Polkit policy. The user who
+started the VPN owns it; that user can reopen Velum to inspect or disconnect it.
+Closing the GUI keeps the VPN running. Helper code comes from the installed
 package, not the development checkout.
 
 ## Xray started but routing failed

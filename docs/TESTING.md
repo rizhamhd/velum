@@ -1,5 +1,20 @@
 # Test evidence and release gates
 
+## Persistent service session (2026-10-02)
+
+The 0.1.0-6 source passed 74 tests and Ruff. Coverage includes GUI socket EOF,
+broken pipes during setup, monitoring without a GUI, reopening over a real local
+socket, authorization and UID ownership, explicit disconnect, invalid reconnect
+input, button locking through intermediate states, restored profile/settings,
+and destruction of a connected Qt client. These lifecycle tests mock networking.
+Socket tests require an environment permitting local Unix sockets.
+
+The isolated namespace suite also passed real Xray/VLESS TCP/UDP egress, IPv6
+blocking, kill-switch protection after engine/routing loss, and rollback retaining
+unrelated firewall state. This is not installed live GUI-close acceptance. Before
+claiming that gate, connect a private profile, close all GUI windows, verify
+ordinary egress and periodic monitoring, reopen, reconnect, and explicitly disconnect.
+
 ## Airtel profile with pre-VPN checks disabled (2026-09-30)
 
 After restarting the installed 0.1.0-5 service, the saved YouTube-SNI profile with
@@ -220,7 +235,8 @@ Exercise Wi-Fi loss, new Wi-Fi/gateway, Ethernet insertion/removal, sleep/resume
 engine termination, TUN removal, GUI death, helper SIGKILL/restart, explicit
 recovery, and reboot. Compare unrelated routes/firewall/resolver settings before
 and after. A non-OFF kill switch must prevent fallback while the session is active.
-GUI exit/crash and explicit disconnect intentionally end session protection.
+GUI exit/crash must retain the session and monitoring; reopen the GUI and check
+that its status matches the service. Explicit disconnect ends session protection.
 
 For hotspot acceptance, create a real NM hotspot, enable sharing, connect a phone,
 and compare its independently observed public IP with the VPN egress. Confirm

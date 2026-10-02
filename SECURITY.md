@@ -25,7 +25,8 @@ server identity, so use a hostname supplied by the provider. Empty means the
 usual SNI/server identity. `allowInsecure=true` is rejected because the tested
 Xray backend removed it; it is never silently translated into another mode.
 
-Kill-switch guarantees are session-scoped and require a non-OFF mode. Graceful
-exit, GUI crash, and explicit recovery restore normal networking. Abrupt helper
+Kill-switch guarantees are session-scoped and require a non-OFF mode. GUI exit
+or crash retains the VPN and its monitoring. Explicit disconnect, orderly service
+stop, and explicit recovery restore normal networking. Abrupt helper
 failure holds the app's firewall until recovery or reboot. Other privileged tools
 can change routes/firewalls outside the application's control.

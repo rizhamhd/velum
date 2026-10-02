@@ -18,6 +18,70 @@ from velum.config.profiles import ProfileStore
 
 @unittest.skipUnless(QApplication, 'Qt is not installed')
 class GuiTests(unittest.TestCase):
+    def test_buttons_wait_for_completion_and_close_does_not_disconnect(self):
+        from unittest.mock import Mock
+
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as d:
+            store = ProfileStore(Path(d) / 'profiles.json')
+            store.save(BASE)
+            client = Mock()
+            window = Window(store=store, client=client)
+            self.assertFalse(window.control_buttons['Connect'].isEnabled())
+            window.refresh_status()
+            window.update_status({'state': 'CONNECTED', 'request_complete': window.pending_request})
+            self.assertFalse(window.control_buttons['Connect'].isEnabled())
+            self.assertTrue(window.control_buttons['Disconnect'].isEnabled())
+            window.control_buttons['Reconnect'].click()
+            self.assertFalse(window.control_buttons['Run Full Test'].isEnabled())
+            request_id = window.pending_request
+            count = client.send.call_count
+            window.reconnect()
+            window.connect_vpn()
+            window.disconnect_vpn()
+            self.assertEqual(client.send.call_count, count)
+            # Intermediate DISCONNECTED belongs to reconnect, not its completion.
+            window.update_status({'state': 'DISCONNECTED'})
+            self.assertFalse(window.control_buttons['Connect'].isEnabled())
+            window.update_status({'state': 'CONNECTED', 'request_complete': request_id})
+            self.assertTrue(window.control_buttons['Reconnect'].isEnabled())
+            window.control_buttons['Disconnect'].click()
+            self.assertEqual(client.send.call_args.args[0], 'disconnect')
+            window.update_status({'state': 'DISCONNECTED', 'request_complete': window.pending_request})
+            self.assertTrue(window.control_buttons['Connect'].isEnabled())
+            count = client.send.call_count
+            window.close()
+            self.assertEqual(client.send.call_count, count)
+            client.close.assert_called_once()
+            app.processEvents()
+
+    def test_reopen_restores_active_profile_and_connection_settings(self):
+        from hashlib import sha256
+        from unittest.mock import Mock
+
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as d:
+            store = ProfileStore(Path(d) / 'profiles.json')
+            store.save(BASE)
+            active = store.save(BASE + '?security=tls')
+            window = Window(store=store, client=Mock())
+            window.refresh_status()
+            window.update_status({'state': 'CONNECTED', 'request_complete': window.pending_request,
+                                  'profile_key': sha256(active['uri'].encode()).hexdigest(),
+                                  'settings': {'expect_change': False, 'kill_switch': 'VPN + hotspot',
+                                               'hotspot': 'wlan1'}})
+            self.assertEqual(window.selected()['id'], active['id'])
+            self.assertFalse(window.expect_change.isChecked())
+            self.assertEqual(window.kill.currentText(), 'VPN + hotspot')
+            self.assertTrue(window.share.isChecked())
+            self.assertEqual(window.hotspot_interface.text(), 'wlan1')
+            window.error('Lost helper connection')
+            self.assertFalse(window.control_buttons['Connect'].isEnabled())
+            window.diagnose()
+            self.assertEqual(window.client.send.call_args.args[0], 'status')
+            window.close()
+            app.processEvents()
+
     def test_public_ip_preference_survives_reopen_and_reaches_helper(self):
         from unittest.mock import Mock
 
@@ -33,6 +97,7 @@ class GuiTests(unittest.TestCase):
             client = Mock()
             reopened = Window(store=store, client=client)
             self.assertFalse(reopened.expect_change.isChecked())
+            reopened.update_status({'state': 'DISCONNECTED'})
             reopened.connect_vpn()
             self.assertIs(client.send.call_args.kwargs['settings']['expect_change'], False)
             reopened.expect_change.setChecked(True)

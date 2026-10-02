@@ -67,7 +67,7 @@ class SessionTests(unittest.TestCase):
         session = Session(Path(directory), runner=Mock())
         session.machine.notify = Mock()
         session.machine.state = State.CONNECTED
-        session.profile = Mock()
+        session.profile = parse_vless(BASE)
         session.upstream = Upstream('eth0', '192.0.2.1', 'Ethernet')
         session.engine = Mock()
         session.tunnel = Mock()

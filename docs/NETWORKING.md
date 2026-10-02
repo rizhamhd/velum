@@ -75,15 +75,16 @@ checks cannot prove that a particular phone is using the intended network.
 | Xray/tun2socks dies | Non-OFF kill switch remains; retry and reverify |
 | Wi-Fi/gateway changes | Detect, hold firewall, recreate network transaction |
 | Resume | Detected by monitor interval; full verification before CONNECTED |
-| GUI exits/crashes | Socket EOF triggers disconnect and restores networking |
+| GUI exits/crashes | VPN, protection, monitoring and automatic recovery continue |
 | Explicit disconnect | Stop children, restore network, remove guard last |
 | Abrupt helper death | systemd kills children; journals and firewall retained |
 | Helper restart with journals | ERROR; authenticated disconnect/recovery required |
 | Reboot | Runtime journals/kernel routes/nftables disappear; normal boot networking |
 
 OFF explicitly permits IPv4 fallback. A kill switch is scoped to the VPN session,
-not a permanent boot-time firewall. GUI crash recovery restores normal networking
-by design. Applications must not assume protection after the GUI/service exits.
+not a permanent boot-time firewall. The session survives GUI closure; reopening
+the GUI authenticates again and retrieves current state. An explicit disconnect
+or orderly service stop ends protection and restores normal networking.
 
 Rollback operations are recorded before mutations. Missing already-removed
 resources are treated idempotently; genuine cleanup failures retain the journal

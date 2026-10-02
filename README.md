@@ -107,14 +107,23 @@ sudo systemctl enable --now velum.socket && velum
 For an already-built local package:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-5-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-6-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
 
 Do not launch `velum` with sudo. KDE's Polkit agent handles authorization when
-the GUI opens a helper session. The socket serves one GUI session at a time.
-Closing/quitting that GUI disconnects the VPN and restores normal networking.
+the GUI opens a helper connection. Closing/quitting the GUI keeps the VPN running,
+including monitoring and automatic recovery. Reopen Velum to see its current
+status; click **Disconnect** to end the VPN. Multiple authorized windows belonging
+to the session's user can control the same VPN. Stopping the service or rebooting
+still ends the session; the VPN does not automatically connect after reboot.
+
+Connect, Disconnect, and Reconnect controls wait for the current operation to finish.
+Reconnect applies the selected profile and current settings; invalid profile syntax
+or unsupported settings are rejected before disconnecting the existing VPN.
+After upgrading the package, restart `velum.service` and reopen the GUI to load the
+new behavior. Restarting the service ends any current VPN connection.
 
 ### Xray setup
 
@@ -213,7 +222,8 @@ supported mode; selecting native tunneling produces an explicit error. IPv6
 sysctls are not permanently changed. Local LAN bypass is not yet implemented.
 
 Engine failure/network changes retain the guard while reconnecting. An explicit
-disconnect, GUI exit/crash, or orderly service stop restores normal networking.
+disconnect or orderly service stop restores normal networking. GUI exit/crash keeps
+the session and its protection running in the service.
 An abrupt helper death retains journals/rules until authorized recovery or
 reboot. See [failure behavior](docs/NETWORKING.md).
 

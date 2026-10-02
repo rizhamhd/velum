@@ -1,6 +1,7 @@
 import os
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from velum.gui.window import Window
@@ -16,7 +17,9 @@ def main():
     app.setDesktopFileName('org.velum.Velum')
     window = Window()
     window.tray = Tray(window)
+    app.aboutToQuit.connect(window.client.close)
     window.show()
+    QTimer.singleShot(0, window.refresh_status)
     return app.exec()
 
 

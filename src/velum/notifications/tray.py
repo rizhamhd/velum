@@ -9,19 +9,20 @@ class Tray:
         self.last_notice = None
         self.icon = QSystemTrayIcon(window)
         menu = QMenu(window)
-        menu.addAction('Connect', window.connect_vpn)
-        menu.addAction('Disconnect', window.disconnect_vpn)
+        window.control_actions['Connect'] = menu.addAction('Connect', window.connect_vpn)
+        window.control_actions['Disconnect'] = menu.addAction('Disconnect', window.disconnect_vpn)
         self.profiles = menu.addMenu('Profiles')
         self.profiles.aboutToShow.connect(self.refresh_profiles)
-        menu.addAction('Reconnect', window.reconnect)
+        window.control_actions['Reconnect'] = menu.addAction('Reconnect', window.reconnect)
         menu.addAction('Diagnostics', self.diagnostics)
         menu.addAction('Open', self.open)
         menu.addSeparator()
-        menu.addAction('Quit', self.quit)
+        menu.addAction('Quit app (keep VPN running)', self.quit)
         self.icon.setContextMenu(menu)
         self.icon.activated.connect(lambda reason: self.open()
                                    if reason == QSystemTrayIcon.Trigger else None)
-        self.update('DISCONNECTED')
+        self.update(window.last_status)
+        window.update_controls()
         self.icon.show()
 
     def refresh_profiles(self):
@@ -43,8 +44,7 @@ class Tray:
         self.window.diagnose()
 
     def quit(self):
-        # Closing the private control socket is an explicit session teardown.
-        self.window.client.socket.disconnectFromServer()
+        self.window.client.close()
         QApplication.quit()
 
     def update(self, state, error=''):
