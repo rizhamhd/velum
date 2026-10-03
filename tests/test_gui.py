@@ -18,6 +18,51 @@ from velum.config.profiles import ProfileStore
 
 @unittest.skipUnless(QApplication, 'Qt is not installed')
 class GuiTests(unittest.TestCase):
+    def test_emergency_is_available_while_busy_and_ignores_stale_status(self):
+        from unittest.mock import Mock, patch
+
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as d:
+            client = Mock()
+            window = Window(store=ProfileStore(Path(d) / 'profiles.json'), client=client)
+            window.pending_request = 'connecting'
+            window.update_status({'state': 'VERIFYING'})
+            self.assertTrue(window.kill_button.isEnabled())
+            with patch.object(window.emergency, 'start') as start:
+                window.kill_button.click()
+                window.kill_vpn()
+                start.assert_called_once()
+            client.close.assert_called_once()
+            window.update_status({'state': 'CONNECTED', 'request_complete': 'connecting'})
+            self.assertIn('Stopping VPN', window.summary.text())
+            self.assertFalse(window.kill_button.isEnabled())
+            window.refresh_status()
+            client.send.assert_not_called()
+            event = Mock()
+            window.closeEvent(event)
+            event.ignore.assert_called_once()
+            window.emergency_finished(False, 'Authorization denied; VPN may still be running.')
+            self.assertTrue(window.kill_button.isEnabled())
+            self.assertIn('Authorization denied', window.summary.text())
+            self.assertTrue(window.isVisible())
+            window.refresh_status()
+            self.assertEqual(client.send.call_args.args[0], 'status')
+            window.close()
+            app.processEvents()
+
+    def test_emergency_quits_only_after_confirmed_recovery(self):
+        from unittest.mock import Mock, patch
+
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as d:
+            window = Window(store=ProfileStore(Path(d) / 'profiles.json'), client=Mock())
+            with patch.object(window.emergency, 'start'), patch('velum.gui.window.QApplication.quit') as quit_app:
+                window.kill_vpn()
+                quit_app.assert_not_called()
+                window.emergency_finished(True, '')
+                quit_app.assert_called_once()
+            app.processEvents()
+
     def test_buttons_wait_for_completion_and_close_does_not_disconnect(self):
         from unittest.mock import Mock
 

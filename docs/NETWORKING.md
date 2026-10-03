@@ -77,6 +77,7 @@ checks cannot prove that a particular phone is using the intended network.
 | Resume | Detected by monitor interval; full verification before CONNECTED |
 | GUI exits/crashes | VPN, protection, monitoring and automatic recovery continue |
 | Explicit disconnect | Stop children, restore network, remove guard last |
+| Kill VPN & Quit | Administrator-authorized service/process stop, journal recovery, then GUI exit |
 | Abrupt helper death | systemd kills children; journals and firewall retained |
 | Helper restart with journals | ERROR; authenticated disconnect/recovery required |
 | Reboot | Runtime journals/kernel routes/nftables disappear; normal boot networking |

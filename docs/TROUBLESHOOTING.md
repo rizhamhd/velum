@@ -1,5 +1,19 @@
 # Troubleshooting
 
+## Stuck operations or an unresponsive helper
+
+Use **Kill VPN & Quit** in the window or tray and approve administrator
+authorization. Recovery runs separately from the helper and remains available
+while Connect/Reconnect is pending. It stops the VPN and restores ordinary
+networking before closing the GUI. If the whole GUI is frozen, use:
+
+```sh
+pkexec /usr/lib/velum/emergency-stop
+```
+
+If recovery reports failure, follow the journal recovery instructions below.
+Do not assume protection or successful cleanup from a failed emergency stop.
+
 ## Installation fails with 404 or PKGBUILD does not exist
 
 A pacman `.pkg.tar.zst.sig` download returning **404** means the requested file

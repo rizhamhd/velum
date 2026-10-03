@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-7 — Emergency stop button
+
+- Add a red Kill VPN & Quit button and tray action, available during pending
+  operations and service errors.
+- Use a separate administrator-authorized process to stop only Velum's systemd
+  service/engines, recover journaled networking, and reopen the control socket.
+  The GUI closes only after successful recovery; failures remain visible.
+- Cover authorization cancellation, cleanup failure/timeout, operation ordering,
+  repeated clicks, and stale status updates. All 80 tests and Ruff pass.
+
 ## 0.1.0-6 — Keep VPN running when the GUI closes
 
 - Keep the service session, monitoring, and recovery alive after GUI exit/crash.

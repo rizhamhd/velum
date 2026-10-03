@@ -36,6 +36,7 @@ from velum.security.files import private_write
 from velum.security.logging import event
 from velum.security.redact import redact
 from velum.services.client import Client
+from velum.services.emergency_client import EmergencyStop
 from velum.vpn.configuration import generate_config
 
 
@@ -94,6 +95,9 @@ class Window(QMainWindow):
         self.client = client or Client(self)
         self.client.received.connect(self.update_status)
         self.client.failure.connect(self.error)
+        self.emergency = EmergencyStop(self)
+        self.emergency.finished.connect(self.emergency_finished)
+        self.emergency_running = False
         self.tray = None
         self.last_status = 'UNKNOWN'
         self.pending_request = None
@@ -122,6 +126,13 @@ class Window(QMainWindow):
             self.control_buttons[label] = button
             buttons.addWidget(button)
         layout.addLayout(buttons)
+        self.kill_button = QPushButton('Kill VPN & Quit')
+        self.kill_button.setStyleSheet('QPushButton { background-color: #a92d3b; color: white; padding: 8px; }')
+        self.kill_button.setToolTip('Emergency stop: ends the VPN, restores normal networking, and closes Velum. '
+                                    'Administrator authorization may be required.')
+        self.kill_button.clicked.connect(self.kill_vpn)
+        self.control_buttons['Kill VPN & Quit'] = self.kill_button
+        layout.addWidget(self.kill_button)
         self.profiles = QTableWidget(0, 8)
         self.profiles.setHorizontalHeaderLabels(['Name', 'Server', 'Port', 'Protocol', 'Transport', 'TLS', 'SNI', 'Certificate name'])
         self.profiles.setSelectionBehavior(QTableWidget.SelectRows)
@@ -351,6 +362,8 @@ class Window(QMainWindow):
             self.send_operation('status')
 
     def send_operation(self, operation, **data):
+        if self.emergency_running:
+            return
         self.pending_request = uuid4().hex
         self.pending_operation = operation
         self.update_controls()
@@ -362,7 +375,7 @@ class Window(QMainWindow):
         self.client.send(operation, request_id=self.pending_request, **data)
 
     def update_controls(self):
-        idle = self.pending_request is None
+        idle = self.pending_request is None and not self.emergency_running
         selected = self.selected() is not None
         enabled = {
             'Connect': idle and selected and self.last_status == 'DISCONNECTED',
@@ -370,13 +383,41 @@ class Window(QMainWindow):
             'Reconnect': idle and selected and self.last_status in ('CONNECTED', 'ERROR'),
             'Run connection test': idle,
             'Run Full Test': idle,
+            'Kill VPN & Quit': not self.emergency_running,
         }
         for label, control in [*self.control_buttons.items(), *self.control_actions.items()]:
             control.setEnabled(enabled[label])
 
     def closeEvent(self, event):
+        if self.emergency_running:
+            event.ignore()
+            self.statusBar().showMessage('Emergency recovery is still running. Complete the administrator prompt.')
+            return
         self.client.close()
         super().closeEvent(event)
+
+    def kill_vpn(self):
+        if self.emergency_running:
+            return
+        self.emergency_running = True
+        self.pending_request = None
+        self.pending_operation = None
+        self.client.close()
+        self.update_controls()
+        self.summary.setText('Stopping VPN and restoring normal networking…\n'
+                             'Approve the administrator prompt if shown. Velum will close after recovery.')
+        self.statusBar().showMessage('Emergency stop in progress…')
+        self.emergency.start()
+
+    def emergency_finished(self, success, message):
+        self.emergency_running = False
+        if success:
+            self.close()
+            QApplication.quit()
+        else:
+            self.error(message)
+            self.showNormal()
+            self.raise_()
 
     def copy_report(self):
         QApplication.clipboard().setText(redact(json.dumps(self.last_report, indent=2)))
@@ -387,6 +428,8 @@ class Window(QMainWindow):
             Path(path).write_text(redact(self.logs.toPlainText()))
 
     def update_status(self, data):
+        if self.emergency_running:
+            return
         if data.get('control_denied'):
             self.error(data.get('error', 'Helper access denied'))
             return

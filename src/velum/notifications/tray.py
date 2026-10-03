@@ -17,6 +17,7 @@ class Tray:
         menu.addAction('Diagnostics', self.diagnostics)
         menu.addAction('Open', self.open)
         menu.addSeparator()
+        window.control_actions['Kill VPN & Quit'] = menu.addAction('Kill VPN & Quit', window.kill_vpn)
         menu.addAction('Quit app (keep VPN running)', self.quit)
         self.icon.setContextMenu(menu)
         self.icon.activated.connect(lambda reason: self.open()
@@ -44,6 +45,9 @@ class Tray:
         self.window.diagnose()
 
     def quit(self):
+        if self.window.emergency_running:
+            self.open()
+            return
         self.window.client.close()
         QApplication.quit()
 

@@ -37,6 +37,7 @@ class Client(QObject):
         self.failure.emit("Privileged service unavailable. Install the package and enable velum.socket.")
 
     def send(self, operation, **data):
+        self.socket.blockSignals(False)
         self.pending.append({'operation': operation, **data})
         if self.socket.state() == QLocalSocket.ConnectedState:
             self.flush()

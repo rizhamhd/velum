@@ -30,3 +30,9 @@ or crash retains the VPN and its monitoring. Explicit disconnect, orderly servic
 stop, and explicit recovery restore normal networking. Abrupt helper
 failure holds the app's firewall until recovery or reboot. Other privileged tools
 can change routes/firewalls outside the application's control.
+
+Emergency stop uses pkexec and the installed root-owned
+`/usr/lib/velum/emergency-stop` entry point, with administrator authorization.
+It accepts no options or caller-provided commands. It stops only the Velum units
+and service processes before replaying existing recovery journals. Recovery
+failure leaves the socket stopped and journals available; the GUI stays open.

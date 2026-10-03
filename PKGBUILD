@@ -1,7 +1,7 @@
 # Local-checkout package. Build from the repository root with makepkg -si.
 pkgname=velum-vpn
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc='Qt VLESS client with privilege-separated full-device routing'
 arch=('any')
 license=('MIT')
@@ -41,4 +41,5 @@ package() {
     install -Dm644 "$document" "$pkgdir/usr/share/doc/$pkgname/$document"
   done
   install -Dm755 scripts/recover.sh "$pkgdir/usr/lib/velum/recover"
+  install -Dm755 scripts/emergency-stop.sh "$pkgdir/usr/lib/velum/emergency-stop"
 }

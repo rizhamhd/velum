@@ -107,7 +107,7 @@ sudo systemctl enable --now velum.socket && velum
 For an already-built local package:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-6-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-7-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
@@ -124,6 +124,21 @@ Reconnect applies the selected profile and current settings; invalid profile syn
 or unsupported settings are rejected before disconnecting the existing VPN.
 After upgrading the package, restart `velum.service` and reopen the GUI to load the
 new behavior. Restarting the service ends any current VPN connection.
+
+### Emergency stop
+
+Click the red **Kill VPN & Quit** button (also in the tray menu) if an operation
+gets stuck. It remains available while connecting, reconnecting, or showing an
+error. Approve the administrator prompt if shown. A separate recovery process
+stops Velum's service and engine processes, restores its journaled network
+settings, and closes the window after successful cleanup. It does not depend on
+the helper's control connection. Opening Velum again lets you connect normally.
+
+This ends VPN protection and restores ordinary internet access. It is different
+from the Settings kill switch, which blocks traffic when a tunnel fails. If
+authorization is canceled or recovery fails, the window stays open with an error;
+the app does not claim the VPN has stopped. If the GUI itself cannot respond,
+run `pkexec /usr/lib/velum/emergency-stop` in a terminal.
 
 ### Xray setup
 
