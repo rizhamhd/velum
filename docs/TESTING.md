@@ -1,5 +1,13 @@
 # Test evidence and release gates
 
+## Release updater (2026-10-04)
+
+Updater coverage includes version ordering/no downgrades, invalid release tags,
+checksum mismatches, archive path traversal/symlink/device rejection, canceled
+updates, installation failure, recovery ordering, and GUI update controls.
+Installer and privileged recovery subprocesses are mocked; the tests do not
+upgrade the host or disconnect an existing VPN.
+
 ## Dependency installer (2026-10-04)
 
 Installer tests simulate package-manager responses for installed engines,

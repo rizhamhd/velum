@@ -18,6 +18,30 @@ from velum.config.profiles import ProfileStore
 
 @unittest.skipUnless(QApplication, 'Qt is not installed')
 class GuiTests(unittest.TestCase):
+    def test_update_buttons_show_versions_and_launch_only_on_click(self):
+        from unittest.mock import Mock, patch
+
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as d:
+            window = Window(store=ProfileStore(Path(d) / 'profiles.json'), client=Mock())
+            self.assertFalse(window.install_update_button.isEnabled())
+            with patch.object(window.update_check, 'start') as start:
+                window.check_update_button.click()
+                start.assert_called_once()
+                self.assertFalse(window.check_update_button.isEnabled())
+            window.update_available({'current': '0.1.0-9', 'latest': '0.1.0-10', 'available': True})
+            self.assertIn('0.1.0-10', window.update_label.text())
+            self.assertTrue(window.install_update_button.isEnabled())
+            with patch('velum.gui.window.launch_updater', return_value=True) as launch:
+                launch.assert_not_called()
+                window.install_update_button.click()
+                launch.assert_called_once()
+            window.update_failed('Offline')
+            self.assertTrue(window.check_update_button.isEnabled())
+            self.assertFalse(window.install_update_button.isEnabled())
+            window.close()
+            app.processEvents()
+
     def test_emergency_is_available_while_busy_and_ignores_stale_status(self):
         from unittest.mock import Mock, patch
 

@@ -4,6 +4,9 @@ A Linux desktop manager for user-supplied VLESS configurations, built with
 Python, PySide6/Qt6, Xray, and an authorized networking service. Targets CachyOS,
 Arch Linux, KDE Plasma, and systemd. MIT licensed.
 
+[Download the latest version](https://github.com/rizhamhd/velum/releases/latest)
+• [Update an older installation](#updating)
+
 **0.1.0 is a development release, not a production-certified VPN.** Real TCP/UDP
 traffic through Xray/VLESS, IPv6 blocking, kill-switch behavior, and rollback have
 passed isolated Linux namespace tests. An authorized live WebSocket/TLS provider session also passed Polkit/resolved
@@ -119,7 +122,7 @@ prebuilt package cannot fetch AUR dependencies through pacman; use the installer
 for first-time setup. With its dependencies already installed:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-8-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-9-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
@@ -184,6 +187,43 @@ are supported. The running VPN refuses external or mixed resolver lists without
 modification. The installer can configure a NetworkManager system after asking,
 using a backed-up resolved stub symlink and a dedicated DNS drop-in. Otherwise
 follow your distribution's resolved/NetworkManager setup guidance.
+
+## Updating
+
+**Version 0.1.0-9 and later:** open **Settings → Check for updates**, then
+**Install update…**. The updater opens in a terminal, shows the installed and
+latest versions, and asks before installing. You can also run:
+
+```sh
+velum-update
+```
+
+To check without installing, use `velum-update --check`. Checks happen only when
+requested. Updates use published GitHub releases, verify the installer's SHA-256
+checksum, and reuse the dependency installer. Saved profiles/settings remain.
+Completing an update disconnects the VPN and restores normal networking; close
+and reopen Velum afterward, then reconnect when ready. Package-manager and
+administrator prompts still apply.
+
+**Older versions do not yet have the update button/command.** For the first
+upgrade, open a terminal in your existing Git checkout and run:
+
+```sh
+git pull --ff-only && ./scripts/update.sh
+```
+
+If you originally downloaded a ZIP and have no Git checkout, download the
+`velum-VERSION-installer.tar.gz` asset from the
+[latest release](https://github.com/rizhamhd/velum/releases/latest), extract it,
+and run `./scripts/update.sh` inside that folder. New users should run
+`./scripts/install.sh` instead. Existing source edits are not overwritten by the
+updater, which builds in a separate temporary folder.
+
+Each release includes the source installer, an Arch package for machines with
+dependencies already installed, release notes, and `SHA256SUMS`. Prefer the
+source installer/update command for dependency setup and existing alternate
+tun2socks packages. Older releases remain listed on the
+[releases page](https://github.com/rizhamhd/velum/releases).
 
 ## Import and connect
 
@@ -298,7 +338,8 @@ from other ordinary users, not account compromise or root.
 Logs redact VLESS URIs/UUIDs/common credential fields. Raw engine output is
 suppressed rather than persisted. Public IP services learn the address used to
 contact them; egress verification contacts multiple services about once per minute.
-No telemetry or automatic updates are implemented. See [SECURITY.md](SECURITY.md).
+No telemetry or background update checks are implemented. Updates are explicitly
+requested through Settings or the terminal. See [SECURITY.md](SECURITY.md).
 
 ## Development setup
 

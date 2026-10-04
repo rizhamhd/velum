@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-9 — Versioned releases and user-requested updates
+
+- Show the installed/latest release versions in Settings, with Check for updates
+  and Install update controls. Installation opens in a terminal for authorization.
+- Add `velum-update` and `scripts/update.sh` for existing installations. Download
+  official release installers, check SHA-256, reject unsafe archive paths and
+  downgrades, preserve profiles, and recover networking after installation.
+- Publish versioned source installer/Arch package downloads and checksums, with
+  one-time upgrade instructions for versions that lack the updater.
+
 ## 0.1.0-8 — First-time dependency installer
 
 - Add `scripts/install.sh` for CachyOS/Arch: install runtime/build dependencies,

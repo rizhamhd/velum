@@ -13,6 +13,7 @@ dependencies = ["PySide6>=6.6"]
 [project.scripts]
 velum = "velum.main:main"
 velum-helper = "velum.services.helper:main"
+velum-update = "velum.updates:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

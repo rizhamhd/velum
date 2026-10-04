@@ -32,11 +32,13 @@ from PySide6.QtWidgets import (
 
 from velum.config.profiles import ProfileStore
 from velum.config.vless import ConfigurationError, parse_vless, with_certificate_name
+from velum.gui.updater import UpdateCheck, launch_updater
 from velum.security.files import private_write
 from velum.security.logging import event
 from velum.security.redact import redact
 from velum.services.client import Client
 from velum.services.emergency_client import EmergencyStop
+from velum.version import VERSION
 from velum.vpn.configuration import generate_config
 
 
@@ -199,6 +201,21 @@ class Window(QMainWindow):
         package_help.setWordWrap(True)
         form.addRow(package_help)
         form.addRow(QLabel('Settings apply on the next connection.\nLocal LAN bypass is disabled in this release.'))
+        self.update_label = QLabel('Velum ' + VERSION)
+        self.update_label.setTextFormat(Qt.PlainText)
+        self.check_update_button = QPushButton('Check for updates')
+        self.install_update_button = QPushButton('Install update…')
+        self.install_update_button.setEnabled(False)
+        self.update_check = UpdateCheck(self)
+        self.update_check.finished.connect(self.update_available)
+        self.update_check.failure.connect(self.update_failed)
+        self.check_update_button.clicked.connect(self.check_updates)
+        self.install_update_button.clicked.connect(self.install_update)
+        form.addRow(self.update_label)
+        form.addRow(self.check_update_button)
+        form.addRow(self.install_update_button)
+        form.addRow(QLabel('Updates open in a terminal for installation. Saved profiles are kept.\n'
+                          'Completing an update disconnects the VPN; reopen Velum afterward.'))
         self.tabs.addTab(settings, 'Settings')
         hotspot = QWidget()
         hform = QFormLayout(hotspot)
@@ -227,6 +244,34 @@ class Window(QMainWindow):
                 self.expect_change.setChecked(data['expect_change'])
         except (OSError, ValueError) as exc:
             self.error('Cannot read saved settings: ' + str(exc))
+
+    def check_updates(self):
+        if self.emergency_running:
+            return
+        self.check_update_button.setEnabled(False)
+        self.install_update_button.setEnabled(False)
+        self.update_label.setText('Checking GitHub releases…')
+        self.update_check.start()
+
+    def update_available(self, data):
+        self.check_update_button.setEnabled(True)
+        self.install_update_button.setEnabled(bool(data['available']))
+        self.update_label.setText(f"Installed: {data['current']} • Latest: {data['latest']}\n" +
+                                  ('Update available' if data['available'] else 'You are up to date'))
+
+    def update_failed(self, message):
+        self.check_update_button.setEnabled(True)
+        self.install_update_button.setEnabled(False)
+        self.update_label.setText(message)
+
+    def install_update(self):
+        if self.emergency_running:
+            return
+        if launch_updater():
+            self.install_update_button.setEnabled(False)
+            self.update_label.setText('Updater opened in a terminal. Reopen Velum after it finishes.')
+        else:
+            self.update_failed('Open a terminal and run: velum-update')
 
     def save_preferences(self):
         try:
@@ -394,6 +439,7 @@ class Window(QMainWindow):
             self.statusBar().showMessage('Emergency recovery is still running. Complete the administrator prompt.')
             return
         self.client.close()
+        self.update_check.close()
         super().closeEvent(event)
 
     def kill_vpn(self):

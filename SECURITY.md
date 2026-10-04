@@ -43,3 +43,10 @@ xray-bin/tun2socks-bin AUR recipes. Builds run without root; package signatures
 and source checksum checks are not disabled. The GUI/helper do not fetch engines.
 Guided DNS setup requires a separate installer confirmation and administrator
 access. It uses installed code, backs up DNS files, and rolls back failed checks.
+
+Update checks contact this repository's public GitHub release API only on user
+request. The updater uses HTTPS downloads, checks the published SHA-256, refuses
+unsafe archive entries, and runs source builds as the ordinary user. Checksums
+detect corruption; they are not independent release signatures. Release/package
+artifacts are unsigned and require trust in this repository and its maintainers.
+Installation requires user confirmation and normal administrator authorization.
