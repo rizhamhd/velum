@@ -36,3 +36,10 @@ Emergency stop uses pkexec and the installed root-owned
 It accepts no options or caller-provided commands. It stops only the Velum units
 and service processes before replaying existing recovery journals. Recovery
 failure leaves the socket stopped and journals available; the GUI stays open.
+
+The first-time installer is an explicit package installation operation. It uses
+the configured Arch repositories and, when necessary, the community-maintained
+xray-bin/tun2socks-bin AUR recipes. Builds run without root; package signatures
+and source checksum checks are not disabled. The GUI/helper do not fetch engines.
+Guided DNS setup requires a separate installer confirmation and administrator
+access. It uses installed code, backs up DNS files, and rolls back failed checks.

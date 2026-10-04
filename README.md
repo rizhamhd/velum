@@ -40,7 +40,8 @@ Qt follows your desktop palette. The screenshot is not evidence of a live VPN.
 - Explicit state machine, diagnostics, redacted structured logs, tray menu,
   desktop notifications, reconnect supervision, and write-ahead recovery journals.
 - Atomic 0600 profile storage, 0700 runtime credentials, no shell evaluation of
-  configuration values, and no automatic engine downloads.
+  configuration values. The installer handles engine packages; the running VPN
+  never downloads engines.
 
 ## Architecture
 
@@ -60,54 +61,65 @@ and [routing, DNS, and recovery](docs/NETWORKING.md).
 
 ## Installation: CachyOS / Arch
 
-Run each stage only after the previous one succeeds. First update the system and
-install the build/runtime dependencies:
+**First installation: download/extract this repository and run this in its folder
+as your ordinary desktop user:**
 
 ```sh
-sudo pacman -Syu --needed git base-devel python pyside6 python-build python-installer \
-  python-setuptools ruff iproute2 nftables systemd polkit curl procps-ng \
-  networkmanager polkit-kde-agent
+./scripts/install.sh
 ```
+
+The installer handles the required packages, **including Xray and
+xjasonlyu/tun2socks**. Compatible installed engine packages are reused. Missing
+engines come from your configured repositories when available, otherwise the
+`xray-bin` and `tun2socks-bin` AUR packages are downloaded, built as your ordinary
+user, and installed. You do not need yay or paru. Package-manager password and
+transaction prompts still apply; AUR recipes are community-maintained.
+
+It installs the Python/Qt runtime, networking tools, build tools, and a desktop
+authorization agent if one is missing, then builds/installs Velum and enables its
+control socket. It performs an Arch system upgrade with
+[`pacman --needed`](https://man.archlinux.org/man/pacman.8.en) so up-to-date packages
+are skipped and repository packages stay consistent. Existing packages may be
+upgraded when newer versions are available.
+
+DNS is checked too. If compatible, existing DNS files are left alone. Otherwise,
+the installer offers NetworkManager/systemd-resolved setup, with original files
+saved under `/var/backups/velum-dns-*` and rollback if setup verification fails.
+This guided setup requires an active NetworkManager connection. Custom DNS or
+other network managers may need manual setup. No VPN connection starts during
+installation: open Velum and import your provider's VLESS link afterward.
+
+To download using Git instead of a ZIP, first install Git, then run:
+
+```sh
+sudo pacman -Syu --needed git
+git clone https://github.com/rizhamhd/velum.git && cd velum && ./scripts/install.sh
+```
+
+If you already downloaded the repository, enter that folder and run
+`./scripts/install.sh`; do not clone it again. Both `PKGBUILD` and `scripts/` must
+be present. Do not run the installer with sudo: it requests administrator access
+only for system installation and setup.
 
 If pacman reports a download or `.sig` **404**, fix the mirror/database problem
-before continuing. On CachyOS, rerate mirrors with `sudo cachyos-rate-mirrors`,
-then retry the command above. If the database still points to missing files,
-use `sudo pacman -Syyu` to force a refresh and perform a full upgrade. See
+before rerunning the installer. On CachyOS, rerate mirrors with
+`sudo cachyos-rate-mirrors`. See
 [installation troubleshooting](docs/TROUBLESHOOTING.md#installation-fails-with-404-or-pkgbuild-does-not-exist).
 
-Clone the repository and enter it (Bash and current Fish both support `&&`):
+Advanced/manual installation, with dependencies already prepared:
 
 ```sh
-git clone https://github.com/rizhamhd/velum.git && cd velum
+makepkg -si && sudo systemctl enable --now velum.socket
 ```
 
-If you already cloned it, enter that existing `velum` directory instead. It must
-contain `PKGBUILD`; downloading only the README or running from your home
-directory will not work.
-
-`PKGBUILD` builds the local checkout; it does not download a fictitious release.
-Review and build your own Xray and xjasonlyu/tun2socks packages first. On the
-CachyOS development machine, these are provided by `xray-bin` and
-`tun2socks-bin`; package availability depends on your repositories/AUR choices.
-They are runtime prerequisites even though PKGBUILD lists them as optional to
-allow alternative package providers. Never substitute badvpn-tun2socks.
-
-After installing those engines, build and install Velum as your ordinary user:
+Engine packages are now required dependencies. The package records `xray`
+(also provided by `xray-bin`) and the installed `tun2socks` provider, or
+`tun2socks-bin` by default. Never substitute badvpn-tun2socks. A standalone
+prebuilt package cannot fetch AUR dependencies through pacman; use the installer
+for first-time setup. With its dependencies already installed:
 
 ```sh
-test -f PKGBUILD && makepkg -si
-```
-
-Only after `makepkg` finishes successfully, enable the service and launch the app:
-
-```sh
-sudo systemctl enable --now velum.socket && velum
-```
-
-For an already-built local package:
-
-```sh
-sudo pacman -U ./velum-vpn-0.1.0-7-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-8-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
@@ -142,8 +154,8 @@ run `pkexec /usr/lib/velum/emergency-stop` in a terminal.
 
 ### Xray setup
 
-Install trusted packages yourself; Velum never downloads or executes downloaded
-binaries. Confirm these executable paths and versions:
+The installer installs missing engine packages and checks their executable paths
+and options. The running GUI/helper never downloads engines. To inspect them:
 
 ```sh
 /usr/bin/xray version
@@ -168,9 +180,10 @@ systemctl status systemd-resolved
 
 The sole configured nameserver must be `127.0.0.53`, with resolved and its stub
 listener running. Both stub symlinks and NetworkManager-generated regular files
-are supported. External or mixed resolver lists are refused without modification. Follow
-your distribution's resolved/NetworkManager setup guidance if migration is
-needed; Velum does not replace `/etc/resolv.conf` automatically.
+are supported. The running VPN refuses external or mixed resolver lists without
+modification. The installer can configure a NetworkManager system after asking,
+using a backed-up resolved stub symlink and a dedicated DNS drop-in. Otherwise
+follow your distribution's resolved/NetworkManager setup guidance.
 
 ## Import and connect
 

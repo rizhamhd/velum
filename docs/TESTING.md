@@ -1,5 +1,18 @@
 # Test evidence and release gates
 
+## Dependency installer (2026-10-04)
+
+Installer tests simulate package-manager responses for installed engines,
+repository packages, missing AUR engines, desktop agents, and failed downloads.
+The AUR build path is exercised with mocked git/makepkg commands. DNS migration
+uses temporary filesystem trees and mocked system commands, covering backups,
+regular files/symlinks, failed verification, and restoration of service state.
+The local engine check also ran against the installed Xray and tun2socks.
+
+A full first-time install on a clean Arch/CachyOS VM, real AUR downloads, and live
+DNS migration remain acceptance checks. Tests do not perform a system upgrade or
+change the development machine's DNS configuration.
+
 ## Persistent service session (2026-10-02)
 
 The 0.1.0-6 source passed 74 tests and Ruff. Coverage includes GUI socket EOF,

@@ -1,16 +1,21 @@
 # Local-checkout package. Build from the repository root with makepkg -si.
 pkgname=velum-vpn
 pkgver=0.1.0
-pkgrel=7
+pkgrel=8
 pkgdesc='Qt VLESS client with privilege-separated full-device routing'
 arch=('any')
 license=('MIT')
-depends=('python' 'pyside6' 'iproute2' 'nftables' 'systemd' 'polkit' 'curl' 'procps-ng')
+depends=('python' 'pyside6' 'iproute2' 'nftables' 'systemd' 'polkit' 'curl' 'procps-ng' 'xray')
+# The AUR tun2socks-bin package does not declare provides=tun2socks. Record the
+# installed compatible provider so source-package users do not replace it.
+if pacman -T tun2socks >/dev/null 2>&1; then
+  depends+=('tun2socks')
+else
+  depends+=('tun2socks-bin')
+fi
 makedepends=('python-build' 'python-installer' 'python-setuptools')
 checkdepends=('ruff')
-optdepends=('xray: required VPN engine (xray-bin also works)'
-            'tun2socks: required xjasonlyu TUN adapter (tun2socks-bin also works)'
-            'networkmanager: hotspot connection detection'
+optdepends=('networkmanager: hotspot connection detection and guided DNS setup'
             'polkit-kde-agent: KDE authentication dialog')
 source=()
 sha256sums=()

@@ -29,7 +29,7 @@ On CachyOS, if the mirror still returns 404, rerate mirrors and refresh again:
 sudo cachyos-rate-mirrors && sudo pacman -Syyu
 ```
 
-Then repeat the dependency installation in the README. Keep signature checking
+Then rerun `./scripts/install.sh`. Keep signature checking
 enabled; a missing signature file is a download problem, not a reason to disable
 verification. See the [CachyOS FAQ](https://wiki.cachyos.org/cachyos_basic/faq/#error-404-not-found)
 and [Arch pacman troubleshooting](https://wiki.archlinux.org/title/Pacman#Troubleshooting).
@@ -39,11 +39,11 @@ or the repository has not been cloned. For a fresh checkout:
 
 ```sh
 git clone https://github.com/rizhamhd/velum.git && cd velum
-test -f PKGBUILD && makepkg -si
+./scripts/install.sh
 ```
 
 If the repository is already on disk, enter its existing directory instead of
-cloning again. Finish the dependencies and engine setup before building.
+cloning again. The installer prepares dependencies and engines before building.
 
 `Unit velum.socket does not exist` and `Unknown command: velum` are expected when
 the package was never installed. After `makepkg -si` succeeds:
@@ -104,8 +104,10 @@ nmcli general status
 Both regular NetworkManager-generated files and symlinks are supported when
 127.0.0.53 is the sole nameserver and the resolved stub is reachable. External
 resolvers, mixed resolver lists, and unreachable stub listeners are refused.
-Configure resolved according to distro documentation first. No automatic resolver
-migration is attempted. Do not replace resolv.conf merely to silence an error.
+The installer offers backed-up NetworkManager/resolved setup after confirmation.
+For other network managers, configure resolved according to distro documentation.
+The running VPN never migrates the resolver automatically. Do not replace
+resolv.conf merely to silence an error.
 
 ## TLS or connectivity fails
 

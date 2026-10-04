@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-8 — First-time dependency installer
+
+- Add `scripts/install.sh` for CachyOS/Arch: install runtime/build dependencies,
+  reuse installed engines and desktop authorization agents, and install missing
+  Xray/tun2socks packages from repositories or the AUR without needing an AUR helper.
+- Require engine dependencies in the Arch package, including the installed
+  tun2socks provider rather than replacing a compatible alternative.
+- Validate engine paths/options, offer backed-up NetworkManager/resolved setup
+  when needed, roll back failed DNS setup, and enable the control socket.
+- Test existing/missing dependencies, repository/AUR selection, download failure,
+  package dependency metadata, and DNS setup/rollback using isolated fixtures.
+
 ## 0.1.0-7 — Emergency stop button
 
 - Add a red Kill VPN & Quit button and tray action, available during pending
