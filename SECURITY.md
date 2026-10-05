@@ -9,7 +9,7 @@ public security inbox; contact the repository owner privately. Do not post real
 provider credentials in issues.
 
 Threat boundaries: imported URLs and local IPC are untrusted; installed root-owned
-code, Polkit, the kernel, Xray, tun2socks, systemd, and root administrators are
+code, Polkit, the kernel, Xray, sing-box, tun2socks, systemd, and root administrators are
 trusted. The GUI runs unprivileged. The root service validates input, rejects
 arbitrary commands/config files, and executes fixed argument arrays. The initial
 implementation retains privileged engine children and requires further review.
@@ -19,11 +19,16 @@ permissions. They are not a replacement for disk encryption or account security.
 The clipboard is intentionally sensitive when explicitly copying a URL. Secrets
 are redacted from application logs; raw engine logs are discarded.
 
-TLS certificate verification stays enabled. Profiles may specify one explicit
+TLS certificate verification is enabled by default. Profiles may specify one explicit
 `verifyPeerCertByName` hostname separately from the SNI. This changes the expected
 server identity, so use a hostname supplied by the provider. Empty means the
-usual SNI/server identity. `allowInsecure=true` is rejected because the tested
-Xray backend removed it; it is never silently translated into another mode.
+usual SNI/server identity. A link explicitly requesting `allowInsecure=true`
+selects the installed sing-box compatibility engine and disables verification.
+The editor, profile table and diagnostics display this; successful egress does
+not mark the server identity as verified. The imported URI is preserved.
+Plain TCP may retain an unused host field, with a visible notice.
+Shadowsocks additionally permits marked UDP only to its pinned provider IP/port;
+other protocols keep the TCP-only endpoint exception.
 
 Kill-switch guarantees are session-scoped and require a non-OFF mode. GUI exit
 or crash retains the VPN and its monitoring. Explicit disconnect, orderly service

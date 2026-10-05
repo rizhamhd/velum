@@ -1,4 +1,5 @@
-"""Strict VLESS parsing. No unknown option is silently discarded."""
+"""Validated VLESS links and shared transport options."""
+import base64
 import ipaddress
 import re
 from dataclasses import asdict, dataclass, field
@@ -44,6 +45,28 @@ class Vless:
     host: str = ''
     parameters: dict[str, str] = field(default_factory=dict, repr=False)
     certificate_name: str = ''
+    allow_insecure: bool = False
+    header_type: str = 'none'
+    service_name: str = ''
+    authority: str = ''
+    mode: str = ''
+    flow: str = ''
+    public_key: str = field(default='', repr=False)
+    short_id: str = field(default='', repr=False)
+    spider_x: str = '/'
+    protocol: str = 'vless'
+    password: str = field(default='', repr=False)
+    cipher: str = ''
+    alter_id: int = 0
+
+    @property
+    def notices(self):
+        notices = []
+        if self.transport == 'tcp' and self.header_type == 'none' and self.host:
+            notices.append('Host is retained in the link but unused by plain TCP.')
+        if self.allow_insecure:
+            notices.append('Certificate verification is disabled by this link (allowInsecure).')
+        return notices
 
     def normalized(self):
         result = asdict(self)
@@ -78,7 +101,8 @@ def parse_vless(uri: str) -> Vless:
             raise
         raise ConfigurationError('Invalid VLESS URL, UUID, port, or query encoding') from exc
     allowed = {'encryption', 'security', 'sni', 'alpn', 'fp', 'type', 'path', 'host',
-               'allowInsecure', 'verifyPeerCertByName'}
+               'allowInsecure', 'verifyPeerCertByName', 'headerType', 'serviceName',
+               'authority', 'mode', 'flow', 'pbk', 'sid', 'spx'}
     query = {}
     for key, value in pairs:
         if key not in allowed:
@@ -91,29 +115,37 @@ def parse_vless(uri: str) -> Vless:
             raise ConfigurationError(f'Control character in parameter: {key}')
         query[key] = value
     transport = query.get('type', 'tcp')
+    transport = {'raw': 'tcp', 'websocket': 'ws', 'splithttp': 'xhttp'}.get(transport, transport)
     security = query.get('security', 'none')
-    if transport not in ('tcp', 'ws'):
-        raise ConfigurationError('Unsupported transport: use tcp or ws')
-    if security not in ('none', 'tls'):
-        raise ConfigurationError('Unsupported security: use none or tls')
+    if transport not in ('tcp', 'ws', 'grpc', 'httpupgrade', 'xhttp'):
+        raise ConfigurationError('Unsupported transport: use tcp, ws, grpc, httpupgrade or xhttp')
+    if security not in ('none', 'tls', 'reality'):
+        raise ConfigurationError('Unsupported security: use none, tls or reality')
     if query.get('encryption', 'none') != 'none':
         raise ConfigurationError('Unsupported VLESS encryption: use none')
-    if transport != 'ws' and {'host', 'path'} & query.keys():
-        raise ConfigurationError('host and path require WebSocket transport')
-    if security != 'tls' and {'sni', 'fp', 'alpn', 'allowInsecure', 'verifyPeerCertByName'} & query.keys():
-        raise ConfigurationError('Certificate options, sni, fp and alpn require TLS')
+    header = query.get('headerType', 'none')
+    if header not in ('none', 'http') or (header != 'none' and transport != 'tcp'):
+        raise ConfigurationError('HTTP headerType requires TCP transport')
+    if transport == 'grpc' and {'host', 'path'} & query.keys():
+        raise ConfigurationError('gRPC uses serviceName and authority, not host or path')
+    if transport == 'tcp' and header == 'none' and query.get('path', '/') not in ('', '/'):
+        raise ConfigurationError('A TCP path requires headerType=http')
+    if security == 'none' and {'sni', 'fp', 'alpn', 'allowInsecure', 'verifyPeerCertByName'} & query.keys():
+        raise ConfigurationError('Certificate options, sni, fp and alpn require TLS or REALITY')
+    if security == 'reality' and {'alpn', 'allowInsecure', 'verifyPeerCertByName'} & query.keys():
+        raise ConfigurationError('TLS certificate options and ALPN are not supported with REALITY')
     insecure = query.get('allowInsecure', '0').lower()
     if insecure not in ('0', '1', 'false', 'true'):
         raise ConfigurationError('allowInsecure must be 0, 1, false or true')
-    if insecure in ('1', 'true'):
-        raise ConfigurationError('This Xray backend no longer supports allowInsecure. '
-                                 'Use a provider certificate name (verifyPeerCertByName) while keeping your SNI.')
+    allow_insecure = insecure in ('1', 'true')
     certificate_name = hostname(query['verifyPeerCertByName']) if 'verifyPeerCertByName' in query else ''
     if certificate_name == 'frommitm':
         raise ConfigurationError('A literal certificate hostname is required')
+    if allow_insecure and certificate_name:
+        raise ConfigurationError('Remove allowInsecure to use a verified certificate name')
     sni = hostname(query['sni']) if query.get('sni') else ''
     host = hostname(query['host']) if query.get('host') else ''
-    path = query.get('path', '/')
+    path = query.get('path') or '/'
     if not path.startswith('/') or len(path) > 4096:
         raise ConfigurationError('WebSocket path must begin with / and be at most 4096 characters')
     fp = query.get('fp', '')
@@ -124,8 +156,39 @@ def parse_vless(uri: str) -> Vless:
         raise ConfigurationError('Invalid ALPN value')
     if len(name) > 200 or any(ord(c) < 32 or ord(c) == 127 for c in name):
         raise ConfigurationError('Profile name must be printable and at most 200 characters')
+    service = query.get('serviceName', '')
+    authority = hostname(query['authority']) if query.get('authority') else ''
+    if transport != 'grpc' and {'serviceName', 'authority'} & query.keys():
+        raise ConfigurationError('serviceName and authority require gRPC')
+    if len(service) > 256 or (service and not re.fullmatch(r'[A-Za-z0-9_./-]+', service)):
+        raise ConfigurationError('Invalid gRPC serviceName')
+    mode = query.get('mode', '')
+    if 'mode' in query and (transport not in ('grpc', 'xhttp') or
+                           mode not in (('gun', 'multi') if transport == 'grpc' else
+                                        ('auto', 'packet-up', 'stream-up', 'stream-one'))):
+        raise ConfigurationError('Invalid transport mode')
+    flow = query.get('flow', '')
+    if flow not in ('', 'xtls-rprx-vision', 'xtls-rprx-vision-udp443') or (flow and
+            (transport != 'tcp' or security not in ('tls', 'reality') or header != 'none')):
+        raise ConfigurationError('Vision flow requires plain TCP with TLS or REALITY')
+    public_key, short_id, spider_x = query.get('pbk', ''), query.get('sid', ''), query.get('spx', '/')
+    if security != 'reality' and {'pbk', 'sid', 'spx'} & query.keys():
+        raise ConfigurationError('pbk, sid and spx require REALITY')
+    if security == 'reality':
+        if transport not in ('tcp', 'grpc', 'xhttp') or header != 'none':
+            raise ConfigurationError('REALITY requires plain TCP, gRPC or XHTTP')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{43}', public_key) or len(base64.urlsafe_b64decode(public_key + '=')) != 32:
+            raise ConfigurationError('REALITY requires a 32-byte base64url public key (pbk)')
+        if not re.fullmatch(r'(?:[0-9a-fA-F]{2}){0,8}', short_id):
+            raise ConfigurationError('REALITY sid must be even-length hex, up to 16 characters')
+        if not sni or not spider_x.startswith('/') or len(spider_x) > 4096:
+            raise ConfigurationError('REALITY requires an SNI and a valid spx path')
+        fp = fp or 'chrome'
     return Vless(uri, uid, server, port, name, transport, security, 'none', sni,
-                 alpn, fp, path, host, query, certificate_name=certificate_name)
+                 alpn, fp, path, host, query, certificate_name=certificate_name,
+                 allow_insecure=allow_insecure, header_type=header, service_name=service,
+                 authority=authority, mode=mode, flow=flow, public_key=public_key,
+                 short_id=short_id, spider_x=spider_x)
 
 
 def with_certificate_name(uri: str, name: str) -> str:

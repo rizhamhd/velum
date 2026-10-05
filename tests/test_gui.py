@@ -18,6 +18,32 @@ from velum.config.profiles import ProfileStore
 
 @unittest.skipUnless(QApplication, 'Qt is not installed')
 class GuiTests(unittest.TestCase):
+    def test_import_legacy_link_and_keep_invalid_dialog_open(self):
+        from PySide6.QtWidgets import QDialog
+
+        app = QApplication.instance() or QApplication([])
+        dialog = ProfileDialog(None)
+        dialog.uri.setText(BASE + '?type=tcp&host=example.invalid&security=tls&allowInsecure=1')
+        self.assertFalse(dialog.certificate_name.isEnabled())
+        self.assertIn('verification is disabled', dialog.tls_notice.text())
+        uri = dialog.profile_uri()
+        dialog.accept()
+        self.assertEqual(dialog.result(), QDialog.Accepted)
+        with tempfile.TemporaryDirectory() as d:
+            store = ProfileStore(Path(d) / 'profiles.json')
+            store.save(uri)
+            window = Window(store=store)
+            self.assertEqual(window.profiles.item(0, 7).text(), 'Verification disabled')
+            window.close()
+        dialog = ProfileDialog(None)
+        dialog.uri.setText('trojan://secret@example.invalid:443?unsupported=secret')
+        dialog.accept()
+        self.assertNotEqual(dialog.result(), QDialog.Accepted)
+        self.assertIn('Unsupported', dialog.tls_notice.text())
+        self.assertNotIn('secret', dialog.tls_notice.text())
+        dialog.close()
+        app.processEvents()
+
     def test_update_buttons_show_versions_and_launch_only_on_click(self):
         from unittest.mock import Mock, patch
 

@@ -53,7 +53,8 @@ def main():
         assert not any(x.get('table', {}).get('name') == 'velum_vpn' for x in tables)
         print('PASS: route/TUN/nftables rollback; unrelated table preserved', flush=True)
     from integration_dataplane import main as test_dataplane
-    test_dataplane()
+    for kind in ('vless', 'vmess', 'shadowsocks', 'vless-insecure', 'trojan'):
+        test_dataplane(kind)
 
 
 if __name__ == '__main__':

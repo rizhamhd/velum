@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import Protocol
 
 from velum.security.files import private_write
-from velum.security.redact import redact
-from velum.vpn.configuration import generate_config
+from velum.vpn.configuration import generate_config, generate_sing_box_config
 
 
 class Backend(Protocol):
@@ -15,6 +14,8 @@ class Backend(Protocol):
 
 
 class Xray:
+    name = 'Xray'
+    program = 'xray'
     def __init__(self, directory: Path, binary='/usr/bin/xray'):
         self.directory = directory
         self.binary = binary
@@ -29,19 +30,26 @@ class Xray:
     def generate_config(self, profile, server_ip=None):
         return generate_config(profile, server_ip)
 
+    def check_command(self):
+        return [self.binary, 'run', '-test', '-config', str(self.config)]
+
+    def run_command(self):
+        return [self.binary, 'run', '-config', str(self.config)]
+
     def validate_config(self, profile, server_ip=None):
         private_write(self.config, self.generate_config(profile, server_ip))
-        result = subprocess.run([self.binary, 'run', '-test', '-config', str(self.config)],
+        result = subprocess.run(self.check_command(),
                                 capture_output=True, text=True, timeout=15)
         if result.returncode:
-            raise RuntimeError('Xray configuration validation failed: ' +
-                               redact((result.stderr + result.stdout)[-3000:]))
+            # Engines may echo arbitrary authentication data in parser errors.
+            raise RuntimeError(f'{self.name} rejected this profile configuration. '
+                               'Check its protocol/transport options and installed engine version.')
 
     def start(self):
         if self.status():
-            raise RuntimeError('Xray is already running')
+            raise RuntimeError(f'{self.name} is already running')
         # Do not retain raw engine logs: server responses can include credentials.
-        self.process = subprocess.Popen([self.binary, 'run', '-config', str(self.config)],
+        self.process = subprocess.Popen(self.run_command(),
                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def stop(self):
@@ -66,4 +74,26 @@ class Xray:
         return self.process is not None and self.process.poll() is None
 
     def get_logs(self):
-        return 'Raw Xray output is suppressed to protect credentials; see structured diagnostics.'
+        return 'Raw engine output is suppressed to protect credentials; see structured diagnostics.'
+
+
+class SingBox(Xray):
+    name = 'sing-box'
+    program = 'sing-box'
+
+    def __init__(self, directory: Path, binary='/usr/bin/sing-box'):
+        super().__init__(directory, binary)
+        self.config = directory / 'sing-box.json'
+
+    def generate_config(self, profile, server_ip=None):
+        return generate_sing_box_config(profile, server_ip)
+
+    def check_command(self):
+        return [self.binary, 'check', '-c', str(self.config)]
+
+    def run_command(self):
+        return [self.binary, 'run', '-c', str(self.config)]
+
+
+def engine_for(profile, directory):
+    return (SingBox if profile.allow_insecure else Xray)(directory)

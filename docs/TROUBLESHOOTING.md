@@ -129,9 +129,11 @@ diagnostics cannot establish which data allowance was charged; compare the ISP's
 usage counters. Velum does not read those counters.
 
 Check provider address/port, SNI, validity of the subscription, ALPN, system clock,
-and whether the provider supports the imported transport. Unknown `flow`, REALITY,
-XHTTP, and gRPC options are intentionally rejected. Xray 26.3.27 rejects
-`allowInsecure=true`. When a provider uses a different SNI from its certificate,
+and whether the provider supports the imported transport. VLESS supports TCP,
+WebSocket, gRPC, HTTPUpgrade, XHTTP, REALITY and Vision. Unknown options still
+produce errors. Old `allowInsecure=true` links need the installed sing-box
+compatibility engine; verification is disabled and labeled in the UI.
+When a provider uses a different SNI from its certificate,
 set **Edit → Verify certificate for** to the provider's certificate hostname.
 This emits `verifyPeerCertByName` while preserving the original SNI and still
 validating the certificate chain and configured name. Obtain the expected name

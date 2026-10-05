@@ -16,6 +16,8 @@ def check_engines():
     xray = runner.run('/usr/bin/xray', 'version')
     if not xray.startswith('Xray '):
         raise RuntimeError('/usr/bin/xray is not the supported Xray engine')
+    if not runner.run('/usr/bin/sing-box', 'version').startswith('sing-box version '):
+        raise RuntimeError('/usr/bin/sing-box is required for allowInsecure compatibility')
     # tun2socks prints its version on stderr in some builds.
     result = subprocess.run(['/usr/bin/tun2socks', '-version'], capture_output=True,
                             text=True, check=True, timeout=10)
@@ -26,7 +28,7 @@ def check_engines():
     help_text = help_result.stdout + help_result.stderr
     if not all(option in help_text for option in ('-device', '-proxy', '-loglevel')):
         raise RuntimeError('Installed tun2socks does not support the required adapter options')
-    print('Xray and tun2socks are installed at the required paths.')
+    print('Xray, sing-box and tun2socks are installed at the required paths.')
 
 
 def check_dns(path=Path('/etc/resolv.conf'), runner=None):

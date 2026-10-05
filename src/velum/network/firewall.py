@@ -8,7 +8,7 @@ from velum.vpn.configuration import MARK
 NFT_TABLE = 'velum_vpn'
 
 
-def ruleset(server, port, kill_switch='VPN only', hotspot=''):
+def ruleset(server, port, kill_switch='VPN only', hotspot='', endpoint_udp=False):
     server = str(ipaddress.IPv4Address(server))
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError('Invalid server port')
@@ -16,6 +16,8 @@ def ruleset(server, port, kill_switch='VPN only', hotspot=''):
         raise ValueError('Invalid kill switch mode')
     if hotspot:
         hotspot = interface_name(hotspot)
+    if not isinstance(endpoint_udp, bool):
+        raise ValueError('Invalid provider UDP setting')
     lines = [f'table inet {NFT_TABLE} {{',
              'chain output { type filter hook output priority -50; policy accept;',
              'oifname "lo" accept',
@@ -26,8 +28,10 @@ def ruleset(server, port, kill_switch='VPN only', hotspot=''):
         # Permit DHCP replies from the laptop's existing NM hotspot service.
         lines += [f'oifname "{hotspot}" udp sport 67 udp dport 68 accept']
     if kill_switch != 'OFF':
-        lines += [f'meta mark {MARK} ip daddr {server} tcp dport {port} accept',
-                  'udp sport 68 udp dport 67 accept', 'drop']
+        lines += [f'meta mark {MARK} ip daddr {server} tcp dport {port} accept']
+        if endpoint_udp:
+            lines += [f'meta mark {MARK} ip daddr {server} udp dport {port} accept']
+        lines += ['udp sport 68 udp dport 67 accept', 'drop']
     lines += ['}', 'chain forward { type filter hook forward priority -50; policy accept;',
               'meta nfproto ipv6 drop']
     if hotspot:
@@ -70,8 +74,8 @@ class Firewall:
         if any(v.get('table', {}).get('name') == NFT_TABLE for v in data['nftables']):
             raise NetworkError('Velum nftables table already exists; recover the stale session first')
 
-    def configure(self, server, port, kill_switch='VPN only', hotspot=''):
-        content = ruleset(server, port, kill_switch, hotspot)
+    def configure(self, server, port, kill_switch='VPN only', hotspot='', endpoint_udp=False):
+        content = ruleset(server, port, kill_switch, hotspot, endpoint_udp)
         self.runner.run('/usr/bin/nft', '--check', '-f', '-', input=content)
         self.tx.apply(['/usr/bin/nft', '-f', '-'],
                       ['/usr/bin/nft', 'delete', 'table', 'inet', NFT_TABLE], input=content)

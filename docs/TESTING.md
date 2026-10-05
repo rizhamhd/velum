@@ -1,5 +1,29 @@
 # Test evidence and release gates
 
+## Expanded link support (2026-10-05)
+
+The parser, profile store, editor and engine tests cover original provider-style
+TCP links with a redundant host and allowInsecure, VLESS transport combinations,
+VMess base64 JSON, Trojan and Shadowsocks share links, secret redaction, and
+explicit errors for unsupported combinations. Generated configurations passed
+Xray 26.3.27 and sing-box 1.14.2 validation.
+
+The expanded isolated network namespace suite passed actual TCP and UDP traffic
+through Xray VLESS, VMess and Shadowsocks, and sing-box VLESS/TLS and Trojan/TLS
+with allowInsecure and a self-signed lab certificate. Each case also passed IPv6
+blocking, fail-closed behavior after engine death and route loss, and rollback.
+The compatibility engine retains the same local SOCKS interface and routing mark.
+Shadowsocks alone adds the marked provider UDP exception. No host routes changed.
+
+REALITY, gRPC, HTTPUpgrade and XHTTP have parser/configuration validation coverage;
+they have not each been tested with a live provider. Live hotspot, suspend/hotplug,
+and independent security review remain unverified release gates. A successful
+allowInsecure connection does not verify the provider's certificate identity.
+
+For a separately extracted sing-box test binary, set `VELUM_TEST_SING_BOX` to its
+absolute path when running the test suite or namespace integration script. The
+installed helper always uses `/usr/bin/sing-box`, never a caller-selected path.
+
 ## Release updater (2026-10-04)
 
 Updater coverage includes version ordering/no downgrades, invalid release tags,

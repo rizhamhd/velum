@@ -14,5 +14,6 @@ profiles*.json
 !.env.example
 vpn-profile*.json
 xray.json
+sing-box.json
 network.json
 firewall.json

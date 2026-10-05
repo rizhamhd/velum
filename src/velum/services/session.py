@@ -5,7 +5,7 @@ import time
 from hashlib import sha256
 from pathlib import Path
 
-from velum.config.vless import parse_vless
+from velum.config.links import parse_profile
 from velum.core.state import State, StateMachine
 from velum.diagnostics.verification import IPVerifier, Verification
 from velum.network.dns import ResolvedDNS
@@ -15,7 +15,8 @@ from velum.network.system import NetworkError, Runner, detect_upstream
 from velum.network.transaction import Transaction
 from velum.network.tunnel import TUN, Tunnel
 from velum.security.logging import event
-from velum.vpn.engine import Xray
+from velum.vpn.configuration import generate_engine_config
+from velum.vpn.engine import Xray, engine_for
 
 
 class Session:
@@ -79,7 +80,8 @@ class Session:
 
     def validate_request(self, uri, settings):
         self.validate_settings(settings)
-        profile = parse_vless(uri)
+        profile = parse_profile(uri)
+        generate_engine_config(profile)
         try:
             address = ipaddress.ip_address(profile.server)
         except ValueError:
@@ -93,6 +95,8 @@ class Session:
             raise RuntimeError('Disconnect or recover the previous session first')
         profile = self.validate_request(uri, settings)
         self.profile = profile
+        self.engine = engine_for(profile, self.directory)
+        self.verification.engine = self.engine
         self.settings = settings
         self.retries = 0
         actions = {
@@ -110,13 +114,15 @@ class Session:
     def validate(self):
         self.preflight_checks = []
         self.original_ip = ''
-        for binary in ('xray', 'tun2socks', 'ip', 'nft', 'resolvectl', 'curl', 'sysctl'):
+        for binary in (self.engine.program, 'tun2socks', 'ip', 'nft', 'resolvectl', 'curl', 'sysctl'):
             if not shutil.which(binary, path='/usr/bin:/usr/sbin'):
                 raise NetworkError(f'Required program is missing: {binary}. See installation instructions.')
         self.engine.validate_config(self.profile)
         self.engine_version = self.engine.version()
-        self.preflight_checks.append({'name': 'VLESS configuration', 'status': 'PASS',
-                                      'detail': 'Strict parser and installed Xray validation passed'})
+        self.preflight_checks.append({'name': 'VPN configuration', 'status': 'PASS',
+                                      'detail': f'Parser and installed {self.engine.name} validation passed'})
+        for notice in self.profile.notices:
+            self.preflight_checks.append({'name': 'Profile option', 'status': 'WARN', 'detail': notice})
         self.upstream = detect_upstream(self.runner)
         self.tunnel.preflight()
         self.firewall.preflight()
@@ -155,7 +161,8 @@ class Session:
     def prepare(self):
         self.firewall.configure(self.server, self.profile.port,
                                 self.settings.get('kill_switch', 'VPN only'),
-                                self.settings.get('hotspot', ''))
+                                self.settings.get('hotspot', ''),
+                                endpoint_udp=self.profile.protocol == 'shadowsocks')
         self.tunnel.prepare(self.upstream, self.server)
 
     def start(self):
@@ -175,8 +182,12 @@ class Session:
             from velum.diagnostics.verification import Check
             detail = ('Certificate verification uses the configured certificate name; original SNI preserved'
                       if self.profile.certificate_name else
-                      'Certificate verification is enforced by Xray; successful tunnel egress required')
-            self.verification.results.append(Check('TLS', 'PASS' if result else 'FAIL', detail))
+                      'Certificate verification is enforced by the VPN engine; successful tunnel egress required')
+            status = 'PASS' if result else 'FAIL'
+            if self.profile.allow_insecure:
+                detail = 'Certificate verification is disabled by this profile; server identity is not verified'
+                status = 'WARN' if result else 'FAIL'
+            self.verification.results.append(Check('TLS', status, detail))
         self.emit()
         return result
 

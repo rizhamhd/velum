@@ -1,11 +1,11 @@
 # Local-checkout package. Build from the repository root with makepkg -si.
 pkgname=velum-vpn
 pkgver=0.1.0
-pkgrel=9
-pkgdesc='Qt VLESS client with privilege-separated full-device routing'
+pkgrel=10
+pkgdesc='Qt VPN client for VLESS, VMess, Trojan and Shadowsocks with full-device routing'
 arch=('any')
 license=('MIT')
-depends=('python' 'pyside6' 'iproute2' 'nftables' 'systemd' 'polkit' 'curl' 'procps-ng' 'xray')
+depends=('python' 'pyside6' 'iproute2' 'nftables' 'systemd' 'polkit' 'curl' 'procps-ng' 'xray' 'sing-box>=1.12')
 # The AUR tun2socks-bin package does not declare provides=tun2socks. Record the
 # installed compatible provider so source-package users do not replace it.
 if pacman -T tun2socks >/dev/null 2>&1; then

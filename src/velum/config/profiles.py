@@ -5,8 +5,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from velum.config.vless import ConfigurationError, parse_vless
+from velum.config.links import parse_profile
+from velum.config.vless import ConfigurationError
 from velum.security.files import private_write
+from velum.vpn.configuration import generate_engine_config
 
 
 def migrate(data):
@@ -14,13 +16,14 @@ def migrate(data):
         return data
     if data.get('version') == 0:
         return {'version': 1, 'profiles': [
-            {'id': str(uuid4()), 'name': parse_vless(uri).name, 'uri': uri,
-             'normalized': parse_vless(uri).normalized()} for uri in data['uris']]}
+            {'id': str(uuid4()), 'name': parse_profile(uri).name, 'uri': uri,
+             'normalized': parse_profile(uri).normalized()} for uri in data['uris']]}
     raise ConfigurationError('Unsupported profile database version')
 
 
 def profile_record(uri, name=None, profile_id=None):
-    parsed = parse_vless(uri)
+    parsed = parse_profile(uri)
+    generate_engine_config(parsed)
     if name is not None and not isinstance(name, str):
         raise ConfigurationError('Profile name must be text')
     name = parsed.name if name is None else name.strip()
@@ -49,7 +52,7 @@ class ProfileStore:
         with os.fdopen(fd) as stream:
             data = migrate(json.load(stream))
         for item in data['profiles']:
-            parse_vless(item['uri'])
+            parse_profile(item['uri'])
         return data['profiles']
 
     def save(self, uri, name=None, profile_id=None):

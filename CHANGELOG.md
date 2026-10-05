@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-10 — More share links and legacy TLS compatibility
+
+- Import VLESS, VMess AEAD, Trojan and Shadowsocks links without rewriting credentials.
+- Add gRPC, HTTPUpgrade, XHTTP, REALITY, Vision and TCP HTTP headers.
+- Preserve redundant TCP host fields with a notice; route explicit allowInsecure
+  profiles through sing-box and show their disabled certificate verification.
+- Keep validation errors in the profile editor. Export the selected engine format,
+  redact all supported links, and permit marked Shadowsocks UDP to its endpoint.
+- Retain the existing Xray path for verified profiles and preserve saved profiles.
+
 ## 0.1.0-9 — Versioned releases and user-requested updates
 
 - Show the installed/latest release versions in Settings, with Check for updates

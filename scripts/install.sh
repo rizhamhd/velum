@@ -78,6 +78,7 @@ main() {
     printf 'Updating Arch packages and installing missing dependencies (up-to-date packages are skipped).\n'
     sudo pacman -Syu --needed "${dependencies[@]}"
     ensure_engine Xray xray-bin xray xray-bin
+    ensure_engine sing-box sing-box-bin sing-box sing-box-bin
     ensure_engine tun2socks tun2socks-bin tun2socks tun2socks-bin
     PYTHONPATH="$project/src" /usr/bin/python -m velum.installation --check-engines
     makepkg --force --syncdeps --install --needed
@@ -90,7 +91,7 @@ main() {
             printf 'Log out and back in to start the newly installed desktop authorization agent.\n'
         fi
     fi
-    printf '\nVelum installed. Open Velum from your app menu (or run velum), then import your VLESS link.\n'
+    printf '\nVelum installed. Open Velum from your app menu (or run velum), then import your VPN link.\n'
     printf 'When upgrading a running Velum, disconnect, run sudo systemctl restart velum.service, and reopen it.\n'
 }
 

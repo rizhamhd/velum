@@ -15,7 +15,6 @@ class ParserTests(unittest.TestCase):
                       'security=tls&verifyPeerCertByName=FromMitM',
                       'security=tls&verifyPeerCertByName=a,b',
                       'security=tls&verifyPeerCertByName=a&verifyPeerCertByName=b',
-                      'security=tls&allowInsecure=1', 'security=tls&allowInsecure=true',
                       'security=tls&allowInsecure=yes', 'security=tls&allowInsecure='):
             with self.subTest(query=query), self.assertRaises(ConfigurationError):
                 parse_vless(BASE + '?' + query)
@@ -54,7 +53,7 @@ class ParserTests(unittest.TestCase):
         for uri in ['https://example.invalid', BASE.replace(':443', ':0'),
                     BASE.replace(':443', ':65536'), BASE.replace(':443', ''),
                     BASE.replace('00000000-0000-4000-8000-000000000001', 'bad'),
-                    BASE + '?type=grpc', BASE + '?security=reality', BASE + '?xyz=yes',
+                    BASE + '?type=kcp', BASE + '?security=reality', BASE + '?xyz=yes',
                     BASE + '?type=ws&type=tcp', BASE + '?path=/a', BASE + '?sni=x',
                     BASE + '?type=ws&path=%0A', BASE + '#%ZZ', BASE + '?fp=random',
                     BASE + '?encryption=auto', BASE + '?type=ws&host=a;touch',

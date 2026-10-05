@@ -11,6 +11,9 @@ from pathlib import Path
 
 from velum.network.system import Runner
 
+LAB_ID = '00000000-0000-4000-8000-000000000001'
+LAB_PASSWORD = 'velum-local-test-password'  # noqa: S105 - isolated test fixture only
+
 
 class HTTP(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -51,6 +54,23 @@ def main():
         'listen': '192.0.2.20', 'port': 24443, 'protocol': 'vless',
         'settings': {'clients': [{'id': '00000000-0000-4000-8000-000000000001'}], 'decryption': 'none'}}],
         'outbounds': [{'protocol': 'freedom'}]}
+    kind = sys.argv[2] if len(sys.argv) > 2 else 'vless'
+    inbound = config['inbounds'][0]
+    if kind == 'vmess':
+        inbound.update(protocol='vmess', settings={'clients': [{'id': LAB_ID}]})
+    elif kind == 'shadowsocks':
+        inbound.update(protocol='shadowsocks', settings={'method': 'aes-128-gcm',
+                       'password': LAB_PASSWORD, 'network': 'tcp,udp'})
+    elif kind == 'trojan':
+        inbound.update(protocol='trojan', settings={'clients': [{'password': LAB_PASSWORD}]})
+    if kind in ('vless-insecure', 'trojan'):
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+                        '-keyout', str(directory / 'key.pem'), '-out', str(directory / 'cert.pem'),
+                        '-subj', '/CN=lab.invalid', '-days', '1'],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        inbound['streamSettings'] = {'network': 'tcp', 'security': 'tls', 'tlsSettings': {
+            'certificates': [{'certificateFile': str(directory / 'cert.pem'),
+                              'keyFile': str(directory / 'key.pem')}]}}
     path = directory / 'lab-server.json'
     path.write_text(json.dumps(config))
     servers = [http.server.HTTPServer(('198.51.100.42', 18080), HTTP),

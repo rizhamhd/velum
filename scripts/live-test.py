@@ -20,8 +20,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from velum.config.links import parse_profile
 from velum.config.profiles import ProfileStore
-from velum.config.vless import parse_vless
 from velum.security.files import private_write
 from velum.security.redact import redact
 
@@ -93,7 +93,7 @@ def ipv6_reachable():
 
 
 def tls_probe(uri):
-    profile = parse_vless(uri)
+    profile = parse_profile(uri)
     if profile.security != 'tls':
         raise RuntimeError('Selected profile does not use TLS')
     if profile.certificate_name:

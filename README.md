@@ -1,7 +1,7 @@
 # Velum
 
-A Linux desktop manager for user-supplied VLESS configurations, built with
-Python, PySide6/Qt6, Xray, and an authorized networking service. Targets CachyOS,
+A Linux desktop manager for user-supplied VLESS, VMess, Trojan and Shadowsocks configurations, built with
+Python, PySide6/Qt6, Xray, sing-box, and an authorized networking service. Targets CachyOS,
 Arch Linux, KDE Plasma, and systemd. MIT licensed.
 
 [Download the latest version](https://github.com/rizhamhd/velum/releases/latest)
@@ -27,13 +27,18 @@ Qt follows your desktop palette. The screenshot is not evidence of a live VPN.
 
 ## Features
 
-- Strict VLESS TCP and WebSocket import, with or without TLS. SNI, ALPN,
-  fingerprint, WebSocket host/path, names, and original URIs are preserved.
+- Import VLESS, VMess base64 JSON (AEAD), Trojan, and Shadowsocks SIP002/legacy
+  links. Original URIs and credentials are preserved.
+- VLESS TCP/RAW, WebSocket, gRPC, HTTPUpgrade and XHTTP; TLS, REALITY,
+  TCP HTTP headers and Vision flow. Options are validated for each transport.
+- Old `allowInsecure=1` links use sing-box with their original SNI and TLS
+  verification disabled, visibly labeled in the editor, table and diagnostics.
+  A redundant `host` on plain TCP is retained with an explanatory notice.
 - Optional certificate hostname separate from SNI, using Xray's
   `verifyPeerCertByName`; certificate verification remains enabled.
 - Unknown, duplicate, invalid, or inapplicable options produce explicit errors.
 - Add, edit, rename, duplicate, delete with confirmation, share/copy URL, import
-  and export profile JSON, and export Xray JSON. Credentials are masked by default.
+  and export profile JSON, and export engine JSON. Credentials are masked by default.
 - Full-device IPv4 TUN, including UDP, using xjasonlyu/tun2socks and Xray.
 - Physical upstream detection; endpoint pinning; independent policy routing;
   verified egress using multiple HTTPS services and ordinary system routing.
@@ -51,7 +56,7 @@ Qt follows your desktop palette. The screenshot is not evidence of a live VPN.
 ```text
 Qt GUI (your UID) ── private Unix connection / Polkit ── root session supervisor
                                                            │
-Application sockets → vpn0 → tun2socks → local SOCKS → Xray → VLESS provider
+Application sockets → vpn0 → tun2socks → local SOCKS → Xray or sing-box → VPN provider
                                                            │
                                                 existing Wi-Fi / Ethernet
 ```
@@ -71,7 +76,7 @@ as your ordinary desktop user:**
 ./scripts/install.sh
 ```
 
-The installer handles the required packages, **including Xray and
+The installer handles the required packages, **including Xray, sing-box and
 xjasonlyu/tun2socks**. Compatible installed engine packages are reused. Missing
 engines come from your configured repositories when available, otherwise the
 `xray-bin` and `tun2socks-bin` AUR packages are downloaded, built as your ordinary
@@ -90,7 +95,7 @@ the installer offers NetworkManager/systemd-resolved setup, with original files
 saved under `/var/backups/velum-dns-*` and rollback if setup verification fails.
 This guided setup requires an active NetworkManager connection. Custom DNS or
 other network managers may need manual setup. No VPN connection starts during
-installation: open Velum and import your provider's VLESS link afterward.
+installation: open Velum and import your provider's VPN link afterward.
 
 To download using Git instead of a ZIP, first install Git, then run:
 
@@ -122,7 +127,7 @@ prebuilt package cannot fetch AUR dependencies through pacman; use the installer
 for first-time setup. With its dependencies already installed:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-9-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-10-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
@@ -166,7 +171,9 @@ and options. The running GUI/helper never downloads engines. To inspect them:
 command -v ip nft resolvectl curl pkcheck
 ```
 
-Tested engine versions: Xray 26.3.27 and xjasonlyu/tun2socks 2.6.0.
+Tested engine versions: Xray 26.3.27, sing-box 1.14.2 and xjasonlyu/tun2socks 2.6.0.
+Install sing-box with `sudo pacman -S sing-box` when upgrading manually; it is
+now a package dependency. Velum launches the chosen engine itself.
 The helper validates every generated config with `xray run -test -config ...`
 before network mutations. A separately running Xray service is not needed.
 
@@ -227,7 +234,7 @@ tun2socks packages. Older releases remain listed on the
 
 ## Import and connect
 
-1. Choose **Add / Import VLESS**, paste your provider's link, optionally name it,
+1. Choose **Add / Import VPN**, paste your provider's link, optionally name it,
    and save. Use **Import file** for Velum profile JSON, not arbitrary Xray JSON.
 2. Select the profile. Review kill-switch and hotspot settings.
 3. Click **Connect** and approve the desktop Polkit prompt.
@@ -252,9 +259,10 @@ If your provider requires an SNI different from its certificate hostname, use
 **Edit → Verify certificate for** to set the provider's certificate hostname.
 The SNI, WebSocket Host/path, and other link options stay unchanged. Leaving this
 field blank retains normal SNI/server certificate checks. This setting is saved
-in the URL as `verifyPeerCertByName` and included in profile/Xray exports. The
-tested Xray 26.3.27 rejects `allowInsecure=true`; Velum reports this explicitly
-instead of silently ignoring it or changing SNI.
+in the link as `verifyPeerCertByName` and included in profile/engine exports.
+Links explicitly setting `allowInsecure=true` use sing-box because current Xray
+rejects that option. They retain their original SNI and disable certificate
+verification. Remove `allowInsecure` before setting a verified certificate name.
 
 Imported credentials live in `$XDG_CONFIG_HOME/velum/profiles.json` (default
 `~/.config/velum/profiles.json`). Exported profiles/Xray JSON contain credentials.
@@ -335,7 +343,7 @@ are accepted; no commands, executable paths, or arbitrary configuration files ca
 be submitted. Profiles are not encrypted at rest; file permissions protect them
 from other ordinary users, not account compromise or root.
 
-Logs redact VLESS URIs/UUIDs/common credential fields. Raw engine output is
+Logs redact all supported VPN URIs/UUIDs/common credential fields. Raw engine output is
 suppressed rather than persisted. Public IP services learn the address used to
 contact them; egress verification contacts multiple services about once per minute.
 No telemetry or background update checks are implemented. Updates are explicitly
@@ -375,9 +383,15 @@ has been validated.
   suspend/hotplug acceptance remain unverified.
 - IPv4-capable upstream/provider required; IPv6 URLs parse, but IPv6-only endpoints
   cannot connect. IPv6 traffic is blocked instead of tunneled.
-- Only TCP/WebSocket with none/TLS; REALITY, XHTTP, gRPC, flow, subscriptions,
-  custom resolver managers, and coexistence with existing policy-routing VPNs
-  are rejected or unavailable.
+- This is not a universal VPN client: WireGuard/OpenVPN, subscriptions,
+  Shadowsocks plugins, legacy VMess alterId, KCP/QUIC, arbitrary engine JSON,
+  custom resolver managers and coexistence with other policy-routing VPNs are
+  unavailable. Shadowsocks supports AEAD and 2022 ciphers.
+- `allowInsecure` supports plain TCP, WebSocket, gRPC and HTTPUpgrade. XHTTP,
+  TCP HTTP headers, gRPC multi/authority and Vision udp443 require verified TLS
+  with Xray. Advanced unsupported link parameters produce explicit errors.
+- REALITY is supported for VLESS/Trojan over TCP, gRPC and XHTTP; Vision flow
+  is VLESS over plain TCP with TLS/REALITY. VMess uses none/TLS only.
 - Reconnect retries the pinned endpoint address. If provider DNS changes, use
   explicit reconnect to resolve it again.
 - No automatic hotspot creation, configurable LAN bypass, persistence of settings

@@ -67,7 +67,7 @@ class Tunnel:
             if links and 'UP' in links[0].get('flags', []):
                 return
             time.sleep(0.1)
-        raise NetworkError('Xray started, but vpn0 is not ready. The VPN is not active.')
+        raise NetworkError('VPN engine started, but vpn0 is not ready. The VPN is not active.')
 
     def configure_routes(self):
         operations = [

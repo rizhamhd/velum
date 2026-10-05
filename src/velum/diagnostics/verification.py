@@ -67,7 +67,7 @@ class Verification:
             self.results.append(Check(name, 'PASS' if success else 'FAIL', detail))
             return success
 
-        check('Xray core', self.engine.status, 'Xray process is alive')
+        check('VPN core', self.engine.status, 'Selected VPN engine process is alive')
         check('TUN interface', lambda: self.tunnel.status() and bool(self.runner.json(
             '/usr/bin/ip', '-j', 'link', 'show', 'dev', TUN)), 'vpn0 and adapter exist')
         route_ok = check('VPN route', lambda: all(self.runner.json(

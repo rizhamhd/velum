@@ -30,8 +30,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from velum.config.profiles import ProfileStore
-from velum.config.vless import ConfigurationError, parse_vless, with_certificate_name
+from velum.config.links import parse_profile, with_certificate_name
+from velum.config.profiles import ProfileStore, profile_record
+from velum.config.vless import ConfigurationError
 from velum.gui.updater import UpdateCheck, launch_updater
 from velum.security.files import private_write
 from velum.security.logging import event
@@ -39,7 +40,7 @@ from velum.security.redact import redact
 from velum.services.client import Client
 from velum.services.emergency_client import EmergencyStop
 from velum.version import VERSION
-from velum.vpn.configuration import generate_config
+from velum.vpn.configuration import generate_engine_config
 
 
 class ProfileDialog(QDialog):
@@ -51,12 +52,12 @@ class ProfileDialog(QDialog):
         self.name = QLineEdit(item['name'] if item else '')
         self.uri = QLineEdit(item['uri'] if item else '')
         self.uri.setEchoMode(QLineEdit.Password)
-        self.uri.setPlaceholderText('vless://UUID@server:port?...')
+        self.uri.setPlaceholderText('vless://, vmess://, trojan:// or ss://…')
         reveal = QCheckBox('Reveal sensitive URL')
         reveal.toggled.connect(lambda checked: self.uri.setEchoMode(
             QLineEdit.Normal if checked else QLineEdit.Password))
         layout.addRow('Name (optional)', self.name)
-        layout.addRow('VLESS URL', self.uri)
+        layout.addRow('VPN URL', self.uri)
         layout.addRow(reveal)
         self.certificate_name = QLineEdit()
         self.certificate_name.setPlaceholderText('Optional: provider’s certificate hostname')
@@ -64,6 +65,7 @@ class ProfileDialog(QDialog):
         self.tls_notice = QLabel('Leave blank to verify against the SNI. Set the provider’s certificate\n'
                                 'hostname to keep a different SNI with certificate verification enabled.')
         self.tls_notice.setWordWrap(True)
+        self.tls_notice.setTextFormat(Qt.PlainText)
         layout.addRow(self.tls_notice)
         self.uri.textChanged.connect(self.sync_tls_option)
         self.sync_tls_option()
@@ -72,15 +74,26 @@ class ProfileDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
 
+    def accept(self):
+        try:
+            profile_record(self.profile_uri(), self.name.text() or None)
+        except ConfigurationError as exc:
+            self.tls_notice.setText(str(exc))
+            return
+        super().accept()
+
     def sync_tls_option(self):
         try:
-            profile = parse_vless(self.uri.text())
-        except ConfigurationError:
+            profile = parse_profile(self.uri.text())
+        except ConfigurationError as exc:
             self.certificate_name.clear()
             self.certificate_name.setEnabled(False)
+            self.tls_notice.setText(str(exc) if self.uri.text() else 'Paste a VPN share link to see its settings.')
         else:
-            self.certificate_name.setEnabled(profile.security == 'tls')
+            self.certificate_name.setEnabled(profile.security == 'tls' and not profile.allow_insecure)
             self.certificate_name.setText(profile.certificate_name)
+            self.tls_notice.setText('\n'.join(profile.notices) or
+                                    'Leave blank to verify the SNI, or enter the provider’s certificate hostname.')
 
     def profile_uri(self):
         return with_certificate_name(self.uri.text(), self.certificate_name.text())
@@ -115,7 +128,7 @@ class Window(QMainWindow):
         title = QLabel('Velum')
         title.setStyleSheet('font-size: 30px; font-weight: 700;')
         layout.addWidget(title)
-        layout.addWidget(QLabel('Full-device VLESS • Your Wi-Fi or Ethernet remains the internet transport'))
+        layout.addWidget(QLabel('Full-device VPN • VLESS, VMess, Trojan and Shadowsocks'))
         self.summary = QLabel('Checking VPN status…')
         self.summary.setTextFormat(Qt.PlainText)
         self.summary.setStyleSheet('padding: 18px; font-size: 16px;')
@@ -149,7 +162,7 @@ class Window(QMainWindow):
         self.profiles.verticalHeader().hide()
         layout.addWidget(self.profiles)
         actions = QHBoxLayout()
-        for label, action in [('Add / Import VLESS', self.add_profile), ('Edit', self.edit_profile),
+        for label, action in [('Add / Import VPN', self.add_profile), ('Edit', self.edit_profile),
                               ('Import file', self.import_file), ('Export', self.export_profile)]:
             button = QPushButton(label)
             button.clicked.connect(action)
@@ -288,9 +301,10 @@ class Window(QMainWindow):
             return
         self.profiles.setRowCount(len(self.records))
         for row, item in enumerate(self.records):
-            p = parse_vless(item['uri'])
-            for col, value in enumerate([item['name'], p.server, p.port, 'VLESS', p.transport,
-                                          p.security, p.sni, p.certificate_name or 'Same as SNI/server']):
+            p = parse_profile(item['uri'])
+            for col, value in enumerate([item['name'], p.server, p.port, p.protocol.upper(), p.transport,
+                                          p.security, p.sni, ('Verification disabled' if p.allow_insecure else
+                                                              p.certificate_name or 'Same as SNI/server')]):
                 self.profiles.setItem(row, col, QTableWidgetItem(str(value)))
         if self.records:
             self.profiles.selectRow(0)
@@ -354,10 +368,11 @@ class Window(QMainWindow):
 
     def export_xray(self):
         if item := self.selected():
-            path, _ = QFileDialog.getSaveFileName(self, 'Export sensitive Xray configuration', 'xray.json', 'JSON (*.json)')
+            path, _ = QFileDialog.getSaveFileName(self, 'Export sensitive engine configuration',
+                                                       'sing-box.json' if parse_profile(item['uri']).allow_insecure else 'xray.json', 'JSON (*.json)')
             if path:
                 try:
-                    private_write(Path(path), generate_config(parse_vless(item['uri'])))
+                    private_write(Path(path), generate_engine_config(parse_profile(item['uri'])))
                 except Exception as exc:
                     self.error(str(exc))
 
@@ -375,7 +390,7 @@ class Window(QMainWindow):
         for label, action in [('Connect', self.connect_vpn), ('Edit', self.edit_profile),
                               ('Rename', self.rename), ('Duplicate', self.duplicate),
                               ('Share / Copy URL', self.copy_url), ('Export profile', self.export_profile),
-                              ('Export Xray JSON', self.export_xray),
+                              ('Export engine JSON', self.export_xray),
                               ('Delete', self.delete)]:
             menu.addAction(label, action)
         menu.exec(self.profiles.viewport().mapToGlobal(position))
