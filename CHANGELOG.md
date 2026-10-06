@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-11 — Simple install and update command
+
+- Publish `velum-install.sh` as a standalone release download. One command starts
+  the latest installer without cloning Git, choosing a version or extracting files.
+- Verify the source installer checksum and archive paths before running it, use a
+  temporary build directory, and clean up after success or failure.
+- Send existing installations through the updater, including older installations
+  without the update command. Preserve interactive package and DNS prompts.
+- Add `--check` to download and verify the latest installer without installation.
+- Put the copy-and-paste command first in the README and simplify manual guidance.
+
 ## 0.1.0-10 — More share links and legacy TLS compatibility
 
 - Import VLESS, VMess AEAD, Trojan and Shadowsocks links without rewriting credentials.

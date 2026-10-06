@@ -13,6 +13,9 @@
    `SHA256SUMS` file generated with `sha256sum` using their basenames. The updater
    expects exactly those installer and checksum asset names. Do not include
    profiles, runtime journals, credentials, or untracked files.
+   Also export `install.sh` from the tagged commit as `velum-install.sh`, include
+   its checksum, and attach it to every release. The README's version-free
+   installation command depends on this exact asset name.
 6. Create a GitHub release against that exact tag/commit and mark it Latest only
    after all assets are attached. The updater reads the latest published release;
    drafts and GitHub prereleases are not update candidates. This remains a 0.1
@@ -20,6 +23,8 @@
 7. Check `velum-update --check` and download/verify the published bundle. Never
    change a published tag or silently replace a published release's files; issue
    a new package release instead.
+   Download the published `velum-install.sh` and run `bash velum-install.sh --check`
+   to verify the first-time install path without changing the host.
 
 SHA-256 checksums are integrity checks, not cryptographic release signatures.
 Keep previous releases available so users can read their notes and obtain their

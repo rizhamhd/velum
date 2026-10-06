@@ -1,7 +1,7 @@
 # Local-checkout package. Build from the repository root with makepkg -si.
 pkgname=velum-vpn
 pkgver=0.1.0
-pkgrel=10
+pkgrel=11
 pkgdesc='Qt VPN client for VLESS, VMess, Trojan and Shadowsocks with full-device routing'
 arch=('any')
 license=('MIT')

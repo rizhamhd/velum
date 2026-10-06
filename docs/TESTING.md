@@ -1,5 +1,16 @@
 # Test evidence and release gates
 
+## Standalone installer (2026-10-06)
+
+Bootstrap tests exercise the embedded downloader with mocked release metadata,
+valid/missing/duplicate/mismatched checksums, network failures, size limits,
+invalid release versions and archive traversal/link/device entries. Shell tests
+exercise fresh installation, existing and legacy updater selection, failure exit
+codes, retained interactive stdin, temporary-file cleanup and read-only `--check`.
+Package operations and setup are simulated; these tests do not install packages,
+change DNS or disconnect the host. The existing dependency installer and VPN
+connection code are unchanged by this release.
+
 ## Expanded link support (2026-10-05)
 
 The parser, profile store, editor and engine tests cover original provider-style

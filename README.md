@@ -5,7 +5,91 @@ Python, PySide6/Qt6, Xray, sing-box, and an authorized networking service. Targe
 Arch Linux, KDE Plasma, and systemd. MIT licensed.
 
 [Download the latest version](https://github.com/rizhamhd/velum/releases/latest)
+• [Install](#installation-cachyos--arch)
 • [Update an older installation](#updating)
+
+## Installation: CachyOS / Arch
+
+Copy and paste this into your terminal as your **normal user**:
+
+```sh
+curl -fL https://github.com/rizhamhd/velum/releases/latest/download/velum-install.sh -o velum-install.sh && bash velum-install.sh
+```
+
+Follow the password, package and DNS prompts. Then open **Velum** from your app
+menu, add your VPN link and connect.
+
+The same command handles **first installation and updates**. It chooses the latest
+published version, verifies the source installer's checksum, and prepares the
+files automatically. You do not need to clone Git, choose an archive or extract
+anything yourself. Existing installations use the updater and keep saved profiles.
+Completing an update disconnects the VPN; reopen Velum afterward.
+
+Already installed? The shorter command is:
+
+```sh
+velum-update
+```
+
+If `curl` is missing, install it with `sudo pacman -Syu --needed curl`, then retry.
+Do not put `sudo` before `bash velum-install.sh`; setup requests administrator
+access when needed. This installer supports CachyOS/Arch, not Ubuntu or Windows.
+
+<details>
+<summary>What setup does, checks, and manual installation</summary>
+
+The installer prepares Python/Qt, networking and build tools, Xray, sing-box,
+xjasonlyu/tun2socks and a desktop authorization agent when needed. Compatible
+installed engines are reused. Missing engines come from configured repositories
+or community-maintained AUR recipes (`xray-bin`, `sing-box-bin`, `tun2socks-bin`),
+built as your normal user. Neither yay nor paru is required.
+
+It performs an Arch system upgrade with `pacman -Syu --needed` to keep repository
+packages consistent, builds the Velum package, and enables its control socket.
+If DNS needs setup, it offers NetworkManager/systemd-resolved configuration,
+backs up files under `/var/backups/velum-dns-*`, and rolls back failed checks.
+Custom DNS or other network managers may need manual setup. It does not connect
+a VPN during first-time installation.
+
+Check the latest installer without installing anything:
+
+```sh
+bash velum-install.sh --check
+```
+
+For an already downloaded source folder, run:
+
+```sh
+./scripts/install.sh
+```
+
+To build from Git instead:
+
+```sh
+sudo pacman -Syu --needed git
+git clone https://github.com/rizhamhd/velum.git
+cd velum
+./scripts/install.sh
+```
+
+With all dependencies already installed, use `makepkg -si` from a source checkout
+or install the prebuilt package:
+
+```sh
+sudo pacman -U ./velum-vpn-0.1.0-11-any.pkg.tar.zst
+sudo systemctl enable --now velum.socket
+velum
+```
+
+Pacman cannot fetch AUR dependencies for a standalone package; prefer the simple
+installer above for first-time setup. Never substitute badvpn-tun2socks for
+xjasonlyu/tun2socks.
+
+If pacman reports a download or `.sig` **404**, repair the mirrors before retrying.
+On CachyOS, use `sudo cachyos-rate-mirrors`. See
+[installation troubleshooting](docs/TROUBLESHOOTING.md#installation-fails-with-404-or-pkgbuild-does-not-exist).
+
+</details>
 
 **0.1.0 is a development release, not a production-certified VPN.** Real TCP/UDP
 traffic through Xray/VLESS, IPv6 blocking, kill-switch behavior, and rollback have
@@ -66,71 +150,6 @@ mode. Applications use kernel routes through `vpn0`. Wi-Fi stays connected.
 The physical default route is retained in `main`; policy table 28672 routes
 ordinary IPv4 traffic through the tunnel. See [architecture](docs/ARCHITECTURE.md)
 and [routing, DNS, and recovery](docs/NETWORKING.md).
-
-## Installation: CachyOS / Arch
-
-**First installation: download/extract this repository and run this in its folder
-as your ordinary desktop user:**
-
-```sh
-./scripts/install.sh
-```
-
-The installer handles the required packages, **including Xray, sing-box and
-xjasonlyu/tun2socks**. Compatible installed engine packages are reused. Missing
-engines come from your configured repositories when available, otherwise the
-`xray-bin` and `tun2socks-bin` AUR packages are downloaded, built as your ordinary
-user, and installed. You do not need yay or paru. Package-manager password and
-transaction prompts still apply; AUR recipes are community-maintained.
-
-It installs the Python/Qt runtime, networking tools, build tools, and a desktop
-authorization agent if one is missing, then builds/installs Velum and enables its
-control socket. It performs an Arch system upgrade with
-[`pacman --needed`](https://man.archlinux.org/man/pacman.8.en) so up-to-date packages
-are skipped and repository packages stay consistent. Existing packages may be
-upgraded when newer versions are available.
-
-DNS is checked too. If compatible, existing DNS files are left alone. Otherwise,
-the installer offers NetworkManager/systemd-resolved setup, with original files
-saved under `/var/backups/velum-dns-*` and rollback if setup verification fails.
-This guided setup requires an active NetworkManager connection. Custom DNS or
-other network managers may need manual setup. No VPN connection starts during
-installation: open Velum and import your provider's VPN link afterward.
-
-To download using Git instead of a ZIP, first install Git, then run:
-
-```sh
-sudo pacman -Syu --needed git
-git clone https://github.com/rizhamhd/velum.git && cd velum && ./scripts/install.sh
-```
-
-If you already downloaded the repository, enter that folder and run
-`./scripts/install.sh`; do not clone it again. Both `PKGBUILD` and `scripts/` must
-be present. Do not run the installer with sudo: it requests administrator access
-only for system installation and setup.
-
-If pacman reports a download or `.sig` **404**, fix the mirror/database problem
-before rerunning the installer. On CachyOS, rerate mirrors with
-`sudo cachyos-rate-mirrors`. See
-[installation troubleshooting](docs/TROUBLESHOOTING.md#installation-fails-with-404-or-pkgbuild-does-not-exist).
-
-Advanced/manual installation, with dependencies already prepared:
-
-```sh
-makepkg -si && sudo systemctl enable --now velum.socket
-```
-
-Engine packages are now required dependencies. The package records `xray`
-(also provided by `xray-bin`) and the installed `tun2socks` provider, or
-`tun2socks-bin` by default. Never substitute badvpn-tun2socks. A standalone
-prebuilt package cannot fetch AUR dependencies through pacman; use the installer
-for first-time setup. With its dependencies already installed:
-
-```sh
-sudo pacman -U ./velum-vpn-0.1.0-10-any.pkg.tar.zst
-sudo systemctl enable --now velum.socket
-velum
-```
 
 Do not launch `velum` with sudo. KDE's Polkit agent handles authorization when
 the GUI opens a helper connection. Closing/quitting the GUI keeps the VPN running,
@@ -212,21 +231,13 @@ Completing an update disconnects the VPN and restores normal networking; close
 and reopen Velum afterward, then reconnect when ready. Package-manager and
 administrator prompts still apply.
 
-**Older versions do not yet have the update button/command.** For the first
-upgrade, open a terminal in your existing Git checkout and run:
+**Older installations without the update command:** use the same
+[install command](#installation-cachyos--arch) at the top of this page. It detects
+the installed package and launches the latest source updater. You do not need to
+find your old source folder. Existing source edits are not overwritten; release
+builds use a separate temporary folder.
 
-```sh
-git pull --ff-only && ./scripts/update.sh
-```
-
-If you originally downloaded a ZIP and have no Git checkout, download the
-`velum-VERSION-installer.tar.gz` asset from the
-[latest release](https://github.com/rizhamhd/velum/releases/latest), extract it,
-and run `./scripts/update.sh` inside that folder. New users should run
-`./scripts/install.sh` instead. Existing source edits are not overwritten by the
-updater, which builds in a separate temporary folder.
-
-Each release includes the source installer, an Arch package for machines with
+Each release includes `velum-install.sh`, the source installer, an Arch package for machines with
 dependencies already installed, release notes, and `SHA256SUMS`. Prefer the
 source installer/update command for dependency setup and existing alternate
 tun2socks packages. Older releases remain listed on the

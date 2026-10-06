@@ -55,3 +55,11 @@ unsafe archive entries, and runs source builds as the ordinary user. Checksums
 detect corruption; they are not independent release signatures. Release/package
 artifacts are unsigned and require trust in this repository and its maintainers.
 Installation requires user confirmation and normal administrator authorization.
+
+The standalone `velum-install.sh` release asset bootstraps first-time installs
+from the same official GitHub release API. It checks the source archive SHA-256,
+rejects unsafe archive paths/links/devices, and extracts to a private temporary
+directory before running the ordinary installer. Its initial HTTPS download
+requires trust in the release publisher; checksums do not establish an independent
+signature. Existing installations use the updater. `--check` downloads and verifies
+only and does not install missing dependencies or change system settings.
