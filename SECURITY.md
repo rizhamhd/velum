@@ -25,7 +25,10 @@ server identity, so use a hostname supplied by the provider. Empty means the
 usual SNI/server identity. A link explicitly requesting `allowInsecure=true`
 selects the installed sing-box compatibility engine and disables verification.
 The editor, profile table and diagnostics display this; successful egress does
-not mark the server identity as verified. The imported URI is preserved.
+not mark the server identity as verified. The imported URI is preserved unless edited. Entering a certificate hostname
+in the editor explicitly enables verification on save and preserves the SNI;
+the editor previews this change. Leaving an insecure profile’s name field blank
+keeps its existing verification setting.
 Plain TCP may retain an unused host field, with a visible notice.
 Shadowsocks additionally permits marked UDP only to its pinned provider IP/port;
 other protocols keep the TCP-only endpoint exception.

@@ -1,5 +1,16 @@
 # Test evidence and release gates
 
+## Certificate editor (2026-10-07)
+
+Regression tests exercise editing certificate names on allowInsecure TLS links,
+including VLESS, VMess and Trojan. They verify enabling certificate validation,
+preserving SNI/credentials/transport and unrelated URL encoding, retaining an
+unchanged insecure link when blank, and rejecting invalid names. Qt tests cover
+the enabled field, live explanation, Save, reload and generated Xray TLS options.
+Connection and networking code are unchanged; the existing verified TLS path is
+used after entering a name. These tests do not guarantee that a provider accepts
+a chosen certificate identity or SNI.
+
 ## Standalone installer (2026-10-06)
 
 Bootstrap tests exercise the embedded downloader with mocked release metadata,

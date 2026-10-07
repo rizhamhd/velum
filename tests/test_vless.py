@@ -6,6 +6,14 @@ BASE = 'vless://00000000-0000-4000-8000-000000000001@example.invalid:443'
 
 
 class ParserTests(unittest.TestCase):
+    def test_certificate_edit_of_insecure_vless_keeps_sni_and_encoding(self):
+        uri = BASE + '?security=tls&%61llowInsecure=true&sni=cover.invalid&type=ws&path=%2fws#My%20VPN'
+        updated = with_certificate_name(uri, 'cert.example.invalid')
+        self.assertEqual(updated, uri.replace('%61llowInsecure=true', '%61llowInsecure=0')
+                         .replace('#', '&verifyPeerCertByName=cert.example.invalid#'))
+        self.assertFalse(parse_vless(updated).allow_insecure)
+        self.assertEqual(parse_vless(updated).sni, 'cover.invalid')
+
     def test_certificate_name_is_explicit_and_tls_only(self):
         self.assertEqual(parse_vless(BASE + '?security=tls').certificate_name, '')
         p = parse_vless(BASE + '?security=tls&verifyPeerCertByName=cert.example.invalid')

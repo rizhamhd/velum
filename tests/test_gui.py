@@ -24,7 +24,7 @@ class GuiTests(unittest.TestCase):
         app = QApplication.instance() or QApplication([])
         dialog = ProfileDialog(None)
         dialog.uri.setText(BASE + '?type=tcp&host=example.invalid&security=tls&allowInsecure=1')
-        self.assertFalse(dialog.certificate_name.isEnabled())
+        self.assertTrue(dialog.certificate_name.isEnabled())
         self.assertIn('verification is disabled', dialog.tls_notice.text())
         uri = dialog.profile_uri()
         dialog.accept()
@@ -43,6 +43,47 @@ class GuiTests(unittest.TestCase):
         self.assertNotIn('secret', dialog.tls_notice.text())
         dialog.close()
         app.processEvents()
+
+    def test_certificate_box_enables_verification_for_legacy_tls_links(self):
+        from PySide6.QtWidgets import QDialog
+
+        from velum.config.links import parse_profile
+        from velum.vpn.configuration import generate_engine_config
+
+        app = QApplication.instance() or QApplication([])
+        uri = BASE + '?type=tcp&host=example.invalid&security=tls&allowInsecure=1&sni=cover.invalid'
+        with tempfile.TemporaryDirectory() as d:
+            store = ProfileStore(Path(d) / 'profiles.json')
+            saved = store.save(uri)
+            dialog = ProfileDialog(None, saved)
+            self.assertTrue(dialog.certificate_name.isEnabled())
+            self.assertEqual(dialog.profile_uri(), uri)
+            dialog.certificate_name.setText('cert.example.invalid')
+            self.assertIn('enables TLS verification', dialog.tls_notice.text())
+            self.assertNotIn('verification is disabled', dialog.tls_notice.text())
+            dialog.accept()
+            self.assertEqual(dialog.result(), QDialog.Accepted)
+            saved = store.save(dialog.profile_uri(), saved['name'], saved['id'])
+            p = parse_profile(saved['uri'])
+            self.assertFalse(p.allow_insecure)
+            self.assertEqual(p.sni, 'cover.invalid')
+            self.assertEqual(p.host, 'example.invalid')
+            config = generate_engine_config(p)
+            tls = config['outbounds'][0]['streamSettings']['tlsSettings']
+            self.assertEqual(tls['verifyPeerCertByName'], 'cert.example.invalid')
+            self.assertFalse(tls['allowInsecure'])
+            reopened = ProfileDialog(None, store.list()[0])
+            self.assertEqual(reopened.certificate_name.text(), 'cert.example.invalid')
+            reopened.certificate_name.setText('https://invalid.example/path')
+            reopened.accept()
+            self.assertNotEqual(reopened.result(), QDialog.Accepted)
+            self.assertIn('Invalid hostname', reopened.tls_notice.text())
+            reopened.close()
+            window = Window(store=store)
+            self.assertEqual(window.profiles.item(0, 7).text(), 'cert.example.invalid')
+            window.close()
+            dialog.close()
+            app.processEvents()
 
     def test_update_buttons_show_versions_and_launch_only_on_click(self):
         from unittest.mock import Mock, patch

@@ -192,19 +192,31 @@ def parse_vless(uri: str) -> Vless:
 
 
 def with_certificate_name(uri: str, name: str) -> str:
-    """Change only this TLS option, preserving the other URL fields and encoding."""
+    """Set the expected TLS identity, enabling verification when a name is supplied."""
     profile = parse_vless(uri)
     name = hostname(name.strip()) if name.strip() else ''
     if profile.certificate_name == name:
         return profile.original_uri
     if profile.security != 'tls':
         raise ConfigurationError('A certificate name requires TLS')
-    body, fragment_sep, fragment = profile.original_uri.partition('#')
-    address, _, query = body.partition('?')
-    parameters = [part for part in query.split('&')
-                  if unquote_plus(part.partition('=')[0]) != 'verifyPeerCertByName']
-    if name:
-        parameters.append('verifyPeerCertByName=' + name)
-    updated = address + '?' + '&'.join(parameters) + fragment_sep + fragment
+    updated = replace_certificate_options(profile.original_uri, name)
     parse_vless(updated)
     return updated
+
+
+def replace_certificate_options(uri: str, name: str) -> str:
+    """Rewrite TLS options on an already validated URL without re-encoding other fields."""
+    body, fragment_sep, fragment = uri.partition('#')
+    address, _, query = body.partition('?')
+    parameters = []
+    for part in query.split('&'):
+        key = unquote_plus(part.partition('=')[0])
+        if key == 'verifyPeerCertByName':
+            continue
+        if key == 'allowInsecure' and name:
+            part = part.partition('=')[0] + '=0'
+        if part:
+            parameters.append(part)
+    if name:
+        parameters.append('verifyPeerCertByName=' + name)
+    return address + ('?' + '&'.join(parameters) if parameters else '') + fragment_sep + fragment

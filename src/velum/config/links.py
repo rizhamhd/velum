@@ -6,7 +6,12 @@ import re
 from dataclasses import replace
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 
-from velum.config.vless import ConfigurationError, hostname, parse_vless
+from velum.config.vless import (
+    ConfigurationError,
+    hostname,
+    parse_vless,
+    replace_certificate_options,
+)
 
 DUMMY_ID = '00000000-0000-4000-8000-000000000001'
 SS_CIPHERS = ('aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305',
@@ -159,23 +164,17 @@ def with_certificate_name(uri, name):
     name = hostname(name.strip()) if name.strip() else ''
     if p.certificate_name == name:
         return p.original_uri
-    if p.security != 'tls' or (name and p.allow_insecure):
-        raise ConfigurationError('A certificate name requires TLS with verification enabled')
+    if p.security != 'tls':
+        raise ConfigurationError('A certificate name requires TLS')
     if p.protocol == 'vmess':
         data = vmess_data(p.original_uri)
         data.pop('verifyPeerCertByName', None)
         if name:
             data['verifyPeerCertByName'] = name
+            if 'allowInsecure' in data:
+                data['allowInsecure'] = False
         updated = 'vmess://' + base64.b64encode(json.dumps(data).encode()).decode()
     else:
-        from velum.config.vless import with_certificate_name as update_vless
-        if p.protocol == 'vless':
-            return update_vless(uri, name)
-        parts = urlsplit(p.original_uri)
-        pairs = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-                 if k != 'verifyPeerCertByName']
-        if name:
-            pairs.append(('verifyPeerCertByName', name))
-        updated = urlunsplit(parts._replace(query=urlencode(pairs)))
+        updated = replace_certificate_options(p.original_uri, name)
     parse_profile(updated)
     return updated

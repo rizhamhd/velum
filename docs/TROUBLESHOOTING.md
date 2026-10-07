@@ -135,6 +135,10 @@ produce errors. Old `allowInsecure=true` links need the installed sing-box
 compatibility engine; verification is disabled and labeled in the UI.
 When a provider uses a different SNI from its certificate,
 set **Edit → Verify certificate for** to the provider's certificate hostname.
+This box is editable for TLS profiles, including allowInsecure links. Entering a
+name enables verification when saved and leaves the SNI unchanged. If the box is
+disabled, check that the link parses correctly and uses TLS rather than REALITY
+or no transport security. Invalid hostnames keep the dialog open with an error.
 This emits `verifyPeerCertByName` while preserving the original SNI and still
 validating the certificate chain and configured name. Obtain the expected name
 from your provider; do not use an arbitrary hostname. Leaving the field blank

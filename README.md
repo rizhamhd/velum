@@ -76,7 +76,7 @@ With all dependencies already installed, use `makepkg -si` from a source checkou
 or install the prebuilt package:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-11-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-12-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```
@@ -273,7 +273,10 @@ field blank retains normal SNI/server certificate checks. This setting is saved
 in the link as `verifyPeerCertByName` and included in profile/engine exports.
 Links explicitly setting `allowInsecure=true` use sing-box because current Xray
 rejects that option. They retain their original SNI and disable certificate
-verification. Remove `allowInsecure` before setting a verified certificate name.
+verification. The certificate-name box remains editable for TLS links. Entering
+a hostname there enables certificate verification when you save, while preserving
+the original SNI. The editor explains this before saving. Leaving the field blank
+on an insecure link keeps its original setting.
 
 Imported credentials live in `$XDG_CONFIG_HOME/velum/profiles.json` (default
 `~/.config/velum/profiles.json`). Exported profiles/Xray JSON contain credentials.

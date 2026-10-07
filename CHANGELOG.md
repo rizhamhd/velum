@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-12 — Certificate-name editor fix
+
+- Keep the certificate-name box editable for TLS links with allowInsecure.
+- Entering a certificate hostname explicitly enables verification on Save,
+  with a preview in the editor; an empty field preserves an insecure link.
+- Preserve the original SNI, credentials, transport and unrelated URL encoding.
+- Cover VLESS, VMess and Trojan edits, invalid names, save/reopen and engine output.
+
 ## 0.1.0-11 — Simple install and update command
 
 - Publish `velum-install.sh` as a standalone release download. One command starts

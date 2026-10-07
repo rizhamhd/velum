@@ -68,6 +68,7 @@ class ProfileDialog(QDialog):
         self.tls_notice.setTextFormat(Qt.PlainText)
         layout.addRow(self.tls_notice)
         self.uri.textChanged.connect(self.sync_tls_option)
+        self.certificate_name.textChanged.connect(self.update_tls_notice)
         self.sync_tls_option()
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -90,10 +91,27 @@ class ProfileDialog(QDialog):
             self.certificate_name.setEnabled(False)
             self.tls_notice.setText(str(exc) if self.uri.text() else 'Paste a VPN share link to see its settings.')
         else:
-            self.certificate_name.setEnabled(profile.security == 'tls' and not profile.allow_insecure)
+            self.certificate_name.setEnabled(profile.security == 'tls')
             self.certificate_name.setText(profile.certificate_name)
-            self.tls_notice.setText('\n'.join(profile.notices) or
-                                    'Leave blank to verify the SNI, or enter the provider’s certificate hostname.')
+            self.update_tls_notice()
+
+    def update_tls_notice(self):
+        try:
+            profile = parse_profile(self.uri.text())
+        except ConfigurationError:
+            return
+        notices = list(profile.notices)
+        if profile.security != 'tls':
+            notices.append('Certificate hostnames apply to TLS links only.')
+        elif profile.allow_insecure:
+            if self.certificate_name.text().strip():
+                notices = [notice for notice in notices if 'verification is disabled' not in notice]
+                notices.append('Saving this certificate hostname enables TLS verification and keeps your SNI.')
+            else:
+                notices.append('Enter a certificate hostname to enable verification, or leave blank to keep it disabled.')
+        else:
+            notices.append('Leave blank to verify the SNI, or enter the provider’s certificate hostname.')
+        self.tls_notice.setText('\n'.join(notices))
 
     def profile_uri(self):
         return with_certificate_name(self.uri.text(), self.certificate_name.text())

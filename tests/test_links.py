@@ -31,6 +31,29 @@ REALITY = ('?type=tcp&security=reality&sni=example.invalid&flow=xtls-rprx-vision
 
 
 class LinkTests(unittest.TestCase):
+    def test_certificate_override_enables_verification_for_all_tls_link_formats(self):
+        uris = [BASE + '?security=tls&allowInsecure=true&sni=cover.invalid&type=ws&path=%2fws#My%20VPN',
+                vmess(allowInsecure=True, sni='cover.invalid', path='/ws'),
+                'trojan://p%40ss%3Aword@example.invalid:443?allowInsecure=1&sni=cover.invalid&type=ws&path=%2fws#My%20VPN']
+        for uri in uris:
+            with self.subTest(protocol=uri.split(':')[0]):
+                original = parse_profile(uri)
+                self.assertEqual(with_certificate_name(uri, ''), uri)
+                updated = with_certificate_name(uri, ' CERT.EXAMPLE.INVALID ')
+                p = parse_profile(updated)
+                self.assertFalse(p.allow_insecure)
+                self.assertEqual(p.certificate_name, 'cert.example.invalid')
+                self.assertEqual((p.uuid, p.password, p.sni, p.path, p.transport),
+                                 (original.uuid, original.password, original.sni, original.path, original.transport))
+                self.assertIsInstance(engine_for(p, Path('/unused')), Xray)
+                self.assertFalse(parse_profile(with_certificate_name(updated, '')).allow_insecure)
+                if p.protocol != 'vmess':
+                    self.assertIn('path=%2fws#', uri)
+                    self.assertIn('path=%2fws&verifyPeerCertByName=', updated)
+                    self.assertTrue(updated.endswith('#My%20VPN'))
+                with self.assertRaises(ConfigurationError):
+                    with_certificate_name(uri, 'frommitm')
+
     def test_provider_style_link_round_trips_without_changing_settings(self):
         uri = BASE + '?type=tcp&host=example.invalid&security=tls&allowInsecure=1&sni=cover.invalid&fp=chrome&alpn=h2%2Chttp%2F1.1#VPN'
         with tempfile.TemporaryDirectory() as d:
