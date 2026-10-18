@@ -203,6 +203,7 @@ class Window(QMainWindow):
         logs_layout = QVBoxLayout(logs_page)
         self.logs = QTextEdit()
         self.logs.setReadOnly(True)
+        self.logs.document().setMaximumBlockCount(2000)
         logs_layout.addWidget(self.logs)
         for title, action in [('Copy logs', lambda: QApplication.clipboard().setText(self.logs.toPlainText())),
                               ('Save logs', self.save_logs), ('Clear logs', self.logs.clear)]:

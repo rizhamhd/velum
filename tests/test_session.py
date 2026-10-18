@@ -187,3 +187,79 @@ class SessionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'IPv6-only'):
                 session.connect(BASE.replace('example.invalid', '[2001:db8::1]'), {})
             runner.run.assert_not_called()
+
+    @patch('velum.services.session.detect_upstream')
+    def test_busy_ipc_cannot_amplify_monitor_work(self, upstream):
+        with tempfile.TemporaryDirectory() as d:
+            session = self.connected_session(d)
+            upstream.return_value = session.upstream
+            session.last_tick = session.last_verify = 100
+            session.verify = Mock(return_value=True)
+            # 6,000 client-driven ticks over a minute still permit only 30 checks.
+            for sample in range(6000):
+                now = 100 + sample / 100
+                with patch('velum.services.session.time.time', return_value=now), \
+                        patch('velum.services.session.time.monotonic', return_value=now):
+                    session.monitor()
+            self.assertEqual(upstream.call_count, 30)
+            self.assertEqual(session.runner.json.call_count, 30)
+            self.assertEqual(session.firewall.verify.call_count, 4)
+            self.assertEqual(session.dns.verify.call_count, 4)
+            session.verify.assert_not_called()
+
+    @patch('velum.services.session.detect_upstream')
+    def test_resume_bypasses_throttle_and_forces_verification(self, upstream):
+        with tempfile.TemporaryDirectory() as d:
+            session = self.connected_session(d)
+            upstream.return_value = session.upstream
+            session.last_tick = session.last_verify = 100
+            session.last_monitor = session.last_protection_check = 50
+            session.verify = Mock(return_value=True)
+            # CLOCK_MONOTONIC may barely advance during suspend on Linux.
+            with patch('velum.services.session.time.time', return_value=200), \
+                    patch('velum.services.session.time.monotonic', return_value=50.1):
+                session.monitor()
+            session.dns.verify.assert_called_once()
+            session.firewall.verify.assert_called_once()
+            session.verify.assert_called_once()
+            self.assertEqual(session.machine.state, State.CONNECTED)
+
+    @patch('velum.services.session.detect_upstream')
+    def test_route_loss_detected_between_protection_audits(self, upstream):
+        with tempfile.TemporaryDirectory() as d:
+            session = self.connected_session(d)
+            upstream.return_value = session.upstream
+            session.last_tick = session.last_verify = 100
+            session.last_monitor = session.last_protection_check = 100
+            session.runner.json.return_value = [{'dev': 'eth0'}]
+            session.guard_tx.rollback = Mock()
+            with patch('velum.services.session.time.time', return_value=102), \
+                    patch('velum.services.session.time.monotonic', return_value=102):
+                session.monitor()
+            self.assertEqual(session.machine.state, State.ERROR)
+            session.guard_tx.rollback.assert_not_called()
+            session.firewall.verify.assert_not_called()
+
+    @patch('velum.services.session.detect_upstream')
+    def test_slow_egress_probe_does_not_trigger_resume_loop(self, upstream):
+        with tempfile.TemporaryDirectory() as d:
+            session = self.connected_session(d)
+            upstream.return_value = session.upstream
+            session.last_tick = 99
+            session.last_verify = 1
+            clock = {'now': 100}
+
+            def slow_verify():
+                session.last_verify = clock['now']
+                clock['now'] += 20
+                return True
+
+            session.verify = Mock(side_effect=slow_verify)
+            with patch('velum.services.session.time.time', side_effect=lambda: clock['now']), \
+                    patch('velum.services.session.time.monotonic', side_effect=lambda: clock['now']):
+                session.monitor()
+                self.assertEqual(session.last_tick, 120)
+                clock['now'] = 122
+                session.monitor()
+            session.verify.assert_called_once()
+            self.assertEqual(session.machine.state, State.CONNECTED)

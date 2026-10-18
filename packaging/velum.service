@@ -10,6 +10,12 @@ RuntimeDirectory=velum
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
 UMask=0077
+# Bound the combined helper + engines to one CPU worth of time under heavy traffic.
+CPUQuota=100%
+CPUQuotaPeriodSec=20ms
+CPUWeight=50
+# Older Go runtimes (notably tun2socks) otherwise size work to every host CPU.
+Environment=GOMAXPROCS=2
 Restart=on-failure
 RestartSec=3
 KillMode=control-group

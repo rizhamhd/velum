@@ -20,6 +20,9 @@ from velum.vpn.engine import Xray, engine_for
 
 
 class Session:
+    MONITOR_INTERVAL = 2.0
+    PROTECTION_INTERVAL = 15.0
+
     def __init__(self, directory: Path, notify=lambda data: None, runner=None):
         self.directory = directory
         self.runner = runner or Runner()
@@ -41,6 +44,8 @@ class Session:
         self.server = ''
         self.last_verify = 0
         self.last_tick = time.time()
+        self.last_monitor = None
+        self.last_protection_check = None
         self.retry_at = 0
         self.retries = 0
         self.owner = None
@@ -99,6 +104,8 @@ class Session:
         self.verification.engine = self.engine
         self.settings = settings
         self.retries = 0
+        self.last_monitor = None
+        self.last_protection_check = None
         actions = {
             State.VALIDATING: self.validate,
             State.PREPARING_NETWORK: self.prepare,
@@ -227,6 +234,7 @@ class Session:
             self.tunnel.wait()
             self.routes()
             self.dns.configure()
+            self.last_protection_check = None
             self.machine.set(State.VERIFYING)
             if not self.verify():
                 raise NetworkError('Tunnel recovery failed routing or egress verification')
@@ -240,8 +248,22 @@ class Session:
 
     def monitor(self):
         now = time.time()
-        resumed = now - self.last_tick > 15
-        self.last_tick = now
+        tick = time.monotonic()
+        # IPC traffic must not turn the helper into an unbounded subprocess loop.
+        # Use a monotonic deadline, while wall time still detects suspend/resume.
+        resumed = now - self.last_tick > 15 or now < self.last_tick
+        if (not resumed and self.last_monitor is not None
+                and tick - self.last_monitor < self.MONITOR_INTERVAL):
+            return
+        try:
+            self._monitor_connection(now, tick, resumed)
+        finally:
+            # A slow HTTPS check is our own work, not a suspend/resume event.
+            # Schedule from completion so it cannot trigger continuous rechecks.
+            self.last_monitor = time.monotonic()
+            self.last_tick = time.time()
+
+    def _monitor_connection(self, now, tick, resumed):
         if self.machine.state == State.ERROR and self.profile:
             if now >= self.retry_at:
                 self.recover_connection()
@@ -252,8 +274,11 @@ class Session:
             if (not self.engine.status() or not self.tunnel.status()
                     or detect_upstream(self.runner) != self.upstream):
                 raise NetworkError('VPN process or upstream changed')
-            if not self.firewall.verify() or not self.dns.verify():
-                raise NetworkError('DNS or firewall protection changed')
+            if (resumed or self.last_protection_check is None
+                    or tick - self.last_protection_check >= self.PROTECTION_INTERVAL):
+                self.last_protection_check = tick
+                if not self.firewall.verify() or not self.dns.verify():
+                    raise NetworkError('DNS or firewall protection changed')
             if self.runner.json('/usr/bin/ip', '-j', '-4', 'route', 'get', '1.1.1.1')[0].get('dev') != TUN:
                 raise NetworkError('System routing no longer uses the tunnel')
             if resumed or now - self.last_verify > 60:

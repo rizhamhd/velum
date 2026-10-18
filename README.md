@@ -421,3 +421,10 @@ sudo ./scripts/uninstall.sh
 
 This recovers only journaled Velum resources and removes the package. Your saved
 profiles remain. Do not delete the recovery journal before restoring networking.
+
+## CPU usage and gaming temperatures
+
+Version 0.1.0-13 reduces background checks and limits the VPN service to one CPU
+worth of scheduled time. This can trade peak throughput for lower VPN CPU load.
+See [performance measurements and troubleshooting](docs/PERFORMANCE.md); a
+specific laptop temperature cannot be guaranteed.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-13 — Lower background work and bounded VPN CPU
+
+- Prevent client traffic from increasing monitor frequency and fix continuous
+  verification after slow probes were mistaken for sleep/resume.
+- Keep two-second process/routing checks and stagger DNS/firewall audits to 15 seconds.
+- Budget helper/engine CPU time to one logical CPU, with a 20 ms quota period;
+  use two Go execution slots and bound the GUI log document to 2,000 blocks.
+- Add a read-only performance report for comparing the actual gaming/download workload.
+- This limits VPN resource use; a fix for the reported 100°C temperature is not yet verified.
+
 ## 0.1.0-12 — Certificate-name editor fix
 
 - Keep the certificate-name box editable for TLS links with allowInsecure.
