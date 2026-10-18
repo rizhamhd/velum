@@ -12,7 +12,7 @@ from integration_peer import LAB_ID, LAB_PASSWORD
 
 from velum.config.links import parse_profile
 from velum.network.firewall import Firewall
-from velum.network.system import Runner, Upstream
+from velum.network.system import NetworkError, Runner, Upstream
 from velum.network.transaction import Transaction
 from velum.network.tunnel import Tunnel
 from velum.vpn.engine import SingBox, engine_for
@@ -97,6 +97,33 @@ def main(kind='vless'):
             print(f'PASS: ordinary UDP socket traverses real TUN/{kind}', flush=True)
             assert_blocked('2001:db8:1::1', 18082)
             print('PASS: previously reachable IPv6 is blocked during connection', flush=True)
+            # Simulate disappearing Wi-Fi routes with real engines still alive.
+            # Check routing first: the old unconditional rule sent marked engine
+            # traffic back into vpn0 and could recursively saturate the CPU.
+            runner.run('/usr/bin/ip', '-4', 'route', 'flush', 'table', 'main')
+            try:
+                runner.json('/usr/bin/ip', '-j', '-4', 'route', 'get', '192.0.2.20',
+                            'mark', '22096')
+            except NetworkError as exc:
+                assert 'Network is unreachable' in str(exc)
+            else:
+                raise AssertionError('Offline engine traffic must have no route, never vpn0')
+            assert runner.json('/usr/bin/ip', '-j', '-4', 'route', 'get', '198.51.100.42')[0]['dev'] == 'vpn0'
+            try:
+                http_source()
+            except (OSError, IndexError):
+                pass
+            else:
+                raise AssertionError('Application traffic must not escape while upstream is absent')
+            assert firewall.verify()
+            print('PASS: upstream loss cannot route engine into TUN; protection retained', flush=True)
+            runner.run('/usr/bin/ip', '-4', 'route', 'add', '192.0.2.0/24', 'dev', 'uplink0',
+                       'src', '192.0.2.2')
+            runner.run('/usr/bin/ip', '-4', 'route', 'add', 'default', 'via', '192.0.2.1', 'dev', 'uplink0')
+            runner.run('/usr/bin/ip', '-4', 'route', 'add', '192.0.2.20/32', 'via', '192.0.2.1',
+                       'dev', 'uplink0', 'proto', '186')
+            assert http_source() == '198.51.100.42'
+            print('PASS: restored upstream carries tunneled traffic again', flush=True)
             engine.stop()
             runner.run('/usr/bin/ip', '-4', 'rule', 'del', 'priority', '11000')
             assert_blocked('198.51.100.42', 18080)

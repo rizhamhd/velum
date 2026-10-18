@@ -89,7 +89,8 @@ class SessionTests(unittest.TestCase):
             self.assertEqual(session.retry_at, 102)
             session.guard_tx.rollback.assert_not_called()
             session.cleanup_network.assert_not_called()
-            session.engine.stop.assert_not_called()
+            session.engine.stop.assert_called_once()
+            session.tunnel.stop.assert_called_once()
 
     @patch('velum.services.session.detect_upstream')
     def test_periodic_verification_failure_retains_protection(self, upstream):
@@ -104,6 +105,57 @@ class SessionTests(unittest.TestCase):
                 session.monitor()
             session.verify.assert_called_once()
             self.assertEqual(session.machine.state, State.ERROR)
+            session.guard_tx.rollback.assert_not_called()
+
+    @patch('velum.services.session.detect_upstream')
+    def test_wifi_off_stops_engines_and_long_idle_retries_are_bounded(self, upstream):
+        with tempfile.TemporaryDirectory() as d:
+            session = self.connected_session(d)
+            upstream.side_effect = RuntimeError('Wi-Fi is off')
+            session.guard_tx.rollback = Mock()
+            session.tx.rollback = Mock()
+            session.verification.vpn_ip = '198.51.100.42'
+            session.last_tick = session.last_verify = 100
+            for now in range(100, 3700):
+                with patch('velum.services.session.time.time', return_value=now), \
+                        patch('velum.services.session.time.monotonic', return_value=now):
+                    session.monitor()
+                if now == 100:
+                    session.tunnel.stop.assert_called_once()
+                    session.engine.stop.assert_called_once()
+            self.assertEqual(session.machine.state, State.ERROR)
+            self.assertEqual(session.verification.vpn_ip, '')
+            self.assertLess(upstream.call_count, 65)
+            session.engine.start.assert_not_called()
+            session.tunnel.start.assert_not_called()
+            session.guard_tx.rollback.assert_not_called()
+            session.tx.rollback.assert_not_called()
+
+    @patch('velum.services.session.detect_upstream')
+    def test_failed_recovery_stops_partially_started_engines(self, upstream):
+        with tempfile.TemporaryDirectory() as d:
+            session = self.connected_session(d)
+            upstream.return_value = session.upstream
+            session.cleanup_network = Mock()
+            session.guard_tx.rollback = Mock()
+            session.dns.configure.side_effect = RuntimeError('DNS not ready')
+            session.recover_connection()
+            session.engine.start.assert_called_once()
+            session.tunnel.start.assert_called_once()
+            self.assertEqual(session.engine.stop.call_count, 2)
+            self.assertEqual(session.tunnel.stop.call_count, 2)
+            self.assertEqual(session.machine.state, State.ERROR)
+            session.guard_tx.rollback.assert_not_called()
+
+    def test_stopping_adapter_failure_still_stops_engine_and_keeps_guard(self):
+        with tempfile.TemporaryDirectory() as d:
+            session = self.connected_session(d)
+            session.tunnel.stop.side_effect = RuntimeError('Stop failed')
+            session.guard_tx.rollback = Mock()
+            session.connection_lost('VPN tunnel lost.', 2)
+            session.engine.stop.assert_called_once()
+            self.assertEqual(session.machine.state, State.ERROR)
+            self.assertIn('cleanup will retry', session.machine.error)
             session.guard_tx.rollback.assert_not_called()
 
     @patch('velum.services.session.detect_upstream')

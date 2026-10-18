@@ -198,9 +198,26 @@ class Session:
         self.emit()
         return result
 
+    def stop_processes(self):
+        # Stop packet ingestion first, and attempt both stops even if one fails.
+        # Routes, DNS and the protection firewall stay owned until rollback.
+        try:
+            self.tunnel.stop()
+        finally:
+            self.engine.stop()
+
+    def connection_lost(self, message, delay):
+        try:
+            self.stop_processes()
+        except Exception:
+            message += ' A VPN process could not be stopped; cleanup will retry.'
+        self.verification.vpn_ip = ''
+        self.verification.results = []
+        self.retry_at = time.time() + delay
+        self.machine.lost(message)
+
     def cleanup_network(self):
-        self.tunnel.stop()
-        self.engine.stop()
+        self.stop_processes()
         self.tx.rollback()
 
     def cleanup(self):
@@ -222,6 +239,9 @@ class Session:
             return
         self.machine.set(State.RECONNECTING)
         try:
+            # An offline retry must never leave old/partially started engines
+            # running while waiting for a physical route to become available.
+            self.stop_processes()
             upstream = detect_upstream(self.runner)
             self.cleanup_network()
             self.tunnel.preflight()
@@ -243,8 +263,9 @@ class Session:
             self.retries = 0
         except Exception:
             self.retries = min(self.retries + 1, 6)
-            self.retry_at = time.time() + min(60, 5 * 2 ** self.retries)
-            self.machine.lost('VPN tunnel lost; protection retained. Automatic reconnect will retry.')
+            self.connection_lost(
+                'VPN tunnel lost; engines stopped and protection retained. Automatic reconnect will retry.',
+                min(60, 5 * 2 ** self.retries))
 
     def monitor(self):
         now = time.time()
@@ -287,5 +308,5 @@ class Session:
                     raise NetworkError('Periodic routing verification failed')
                 self.machine.set(State.CONNECTED)
         except Exception:
-            self.machine.lost('VPN tunnel lost; kill-switch rules remain active when enabled.')
-            self.retry_at = now + 2
+            self.connection_lost(
+                'VPN tunnel lost; engines stopped. Kill-switch rules remain active when enabled.', 2)

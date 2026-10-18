@@ -75,8 +75,10 @@ class Tunnel:
              ['route', 'del', 'default', 'dev', TUN, 'table', TABLE, 'proto', '186']),
             (['rule', 'add', 'priority', BYPASS, 'fwmark', str(MARK), 'lookup', 'main'],
              ['rule', 'del', 'priority', BYPASS, 'fwmark', str(MARK), 'lookup', 'main']),
-            (['rule', 'add', 'priority', RULE, 'lookup', TABLE],
-             ['rule', 'del', 'priority', RULE, 'lookup', TABLE]),
+            # A failed lookup in main continues to the next rule. Exclude engine
+            # sockets here too, otherwise losing Wi-Fi feeds them back into TUN.
+            (['rule', 'add', 'priority', RULE, 'not', 'fwmark', str(MARK), 'lookup', TABLE],
+             ['rule', 'del', 'priority', RULE, 'not', 'fwmark', str(MARK), 'lookup', TABLE]),
         ]
         for forward, reverse in operations:
             self.tx.apply(['/usr/bin/ip', '-4', *forward], ['/usr/bin/ip', '-4', *reverse])

@@ -19,7 +19,7 @@ Owned resources:
 | Table | 28672 |
 | Endpoint rule | priority 10998, destination provider /32 → main |
 | Engine bypass | priority 10999, fwmark 0x5650 → main |
-| Ordinary traffic | priority 11000 → table 28672 |
+| Ordinary traffic | priority 11000, NOT fwmark 0x5650 → table 28672 |
 | Route protocol | 186 |
 | Internal SOCKS | 127.0.0.1:28673 |
 | Firewall | inet velum_vpn |
@@ -29,6 +29,13 @@ policy route. The destination rule also gives reverse-path filtering a correct
 physical reverse route for provider packets. Xray marks its provider sockets;
 ordinary sockets remain unmarked. Local table priority 0 preserves loopback,
 including the internal SOCKS connection. `main` defaults are never replaced.
+
+A lookup in `main` can fail when Wi-Fi disappears; Linux then continues to the
+next policy rule. The tunnel rule therefore explicitly excludes the engine mark.
+Without this exclusion, the engine could route its own provider connections into
+vpn0 recursively. When no physical route exists, marked sockets now get an
+unreachable result instead of entering TUN. This holds even before the monitor
+observes the failure. Verification checks the exact mark exclusion.
 
 Existing interfaces, priorities, tables, or endpoint host routes that collide are
 refused. Owned resources use `add`, not `replace`. Unrelated rules/tables are not
@@ -72,8 +79,8 @@ checks cannot prove that a particular phone is using the intended network.
 | --- | --- |
 | Config/preflight failure | No routes changed; credentials cleaned |
 | Setup/verification failure | Rollback; error shown; normal networking restored |
-| Xray/tun2socks dies | Non-OFF kill switch remains; retry and reverify |
-| Wi-Fi/gateway changes | Detect, hold firewall, recreate network transaction |
+| Xray/tun2socks dies | Stop both children; non-OFF kill switch remains; retry and reverify |
+| Wi-Fi/gateway changes | Stop children, hold firewall, recreate network transaction when upstream returns |
 | Resume | Detected by monitor interval; full verification before CONNECTED |
 | GUI exits/crashes | VPN, protection, monitoring and automatic recovery continue |
 | Explicit disconnect | Stop children, restore network, remove guard last |
@@ -86,6 +93,12 @@ OFF explicitly permits IPv4 fallback. A kill switch is scoped to the VPN session
 not a permanent boot-time firewall. The session survives GUI closure; reopening
 the GUI authenticates again and retrieves current state. An explicit disconnect
 or orderly service stop ends protection and restores normal networking.
+
+Offline recovery keeps engines stopped, including partially started engines after
+a failed attempt. Retries back off to at most once per minute. A live helper
+detects process/upstream/route loss on its monitoring cadence; the mark exclusion
+prevents routing recursion independently of that cadence. On successful recovery,
+full verification is required before CONNECTED is restored.
 
 Rollback operations are recorded before mutations. Missing already-removed
 resources are treated idempotently; genuine cleanup failures retain the journal

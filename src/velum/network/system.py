@@ -57,6 +57,10 @@ def parse_default(routes, links):
         link = next((p for p in links if p['ifname'] == route['dev']), {})
         if not link:
             continue
+        if (link.get('operstate') in ('DOWN', 'LOWERLAYERDOWN', 'NOTPRESENT')
+                or ('flags' in link and 'UP' not in link['flags'])
+                or 'linkdown' in route.get('flags', [])):
+            continue
         kind = interface_kind(link)
         if kind in ('VPN/TUN', 'Loopback'):
             continue

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-14 — Prevent recursive routing after Wi-Fi loss
+
+- Exclude marked engine sockets from the tunnel rule even when the main routing
+  table has no usable route. Previously, losing Wi-Fi could send the engine's
+  own connections back into its TUN adapter, creating a recursive traffic loop.
+- Stop both engines on tunnel/upstream failure and failed recovery; retain the
+  firewall and retry with bounded backoff. Clear stale verified egress results.
+- Reject down upstream interfaces and verify that the routing exclusion exists.
+- Add offline-idle, partial-recovery and real namespace route-loss/recovery tests.
+- Retain the CPU budget and background-work limits from 0.1.0-13. The routing
+  defect is reproduced and tested; gaming temperature/FPS still needs field validation.
+
 ## 0.1.0-13 — Lower background work and bounded VPN CPU
 
 - Prevent client traffic from increasing monitor frequency and fix continuous

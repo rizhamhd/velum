@@ -1,5 +1,25 @@
 # CPU use and laptop temperatures
 
+## Wi-Fi loss fix in 0.1.0-14
+
+The reported sequence was: connect VPN, disable Wi-Fi, leave the laptop idle,
+then return to high CPU use and severe gaming slowdown. An isolated kernel route
+test reproduced a matching defect: after the upstream routes disappeared, a
+marked VPN provider connection selected vpn0 instead of becoming unreachable.
+That could feed engine connections back through tun2socks recursively.
+
+The tunnel rule now excludes engine-marked packets even when their main-table
+lookup fails. The helper stops both engines on loss or failed recovery, keeps
+the protection firewall, and waits between retries. It also rejects down upstream
+interfaces and clears stale egress results. Real-engine namespace tests remove
+upstream routes, check that marked sockets have no route, test that application
+traffic cannot escape, restore routes and verify tunnel traffic again.
+
+This fixes the reproduced routing defect without relying on a CPU cap. The
+original gaming/100°C condition has not been reproduced, so no particular
+temperature or FPS improvement is claimed. The CPU budget below remains as a
+second limit on helper/engine resource consumption.
+
 ## Changes in 0.1.0-13
 
 - Rate-limit monitoring to at most one pass every two seconds even when GUI/IPC
@@ -20,14 +40,15 @@
 The CPU budget can reduce peak throughput and increase latency when saturated.
 It does not limit games, GPU work, or all kernel networking work, and cannot promise
 any particular laptop temperature. It changes no fan curves, CPU boost settings,
-power profiles, TLS checks, routes, or kill-switch rules.
+power profiles or TLS checks.
 
 ## Evidence and remaining investigation
 
 At inspection the connected laptop reported a CPU package temperature near 59°C;
 Xray and tun2socks showed low CPU use. The reported approximately 100°C gaming
 condition was not reproduced. These changes address confirmed excess background
-work and add a workload budget; they do not establish the cause of that temperature.
+work and add a workload budget. The later Wi-Fi-loss investigation above identified
+a concrete routing defect, but the original thermal event was not measured.
 
 Regression tests exercise 6,000 calls during a simulated minute and permit only
 30 route/upstream passes and four protection audits. Separate tests cover slow

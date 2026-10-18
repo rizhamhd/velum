@@ -424,7 +424,9 @@ profiles remain. Do not delete the recovery journal before restoring networking.
 
 ## CPU usage and gaming temperatures
 
-Version 0.1.0-13 reduces background checks and limits the VPN service to one CPU
-worth of scheduled time. This can trade peak throughput for lower VPN CPU load.
+Version 0.1.0-14 fixes recursive routing when Wi-Fi disappears and stops engines
+while offline, retaining protection and retrying with a delay. It also retains
+the background-check limits and one-CPU service budget from 0.1.0-13. The budget
+can trade peak throughput for lower VPN CPU load.
 See [performance measurements and troubleshooting](docs/PERFORMANCE.md); a
 specific laptop temperature cannot be guaranteed.

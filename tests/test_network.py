@@ -23,3 +23,13 @@ class NetworkTests(unittest.TestCase):
             parse_default([], [])
         with self.assertRaises(NetworkError):
             interface_name('x;reboot')
+
+    def test_disconnected_interface_cannot_supply_upstream(self):
+        routes = [{'dst': 'default', 'dev': 'wlp2s0', 'gateway': '192.0.2.1'}]
+        for link in ({'operstate': 'DOWN'}, {'operstate': 'LOWERLAYERDOWN'},
+                     {'flags': ['BROADCAST', 'MULTICAST']}):
+            with self.subTest(link=link), self.assertRaises(NetworkError):
+                parse_default(routes, [{'ifname': 'wlp2s0', 'link_type': 'ether', **link}])
+        with self.assertRaises(NetworkError):
+            parse_default([{**routes[0], 'flags': ['linkdown']}],
+                          [{'ifname': 'wlp2s0', 'link_type': 'ether'}])

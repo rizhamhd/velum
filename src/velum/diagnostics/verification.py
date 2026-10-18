@@ -3,6 +3,7 @@ import socket
 from dataclasses import asdict, dataclass
 
 from velum.network.tunnel import BYPASS, ENDPOINT, RULE, TABLE, TUN
+from velum.vpn.configuration import MARK
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,10 @@ class Verification:
         priorities = {int(rule['priority']) for rule in rules}
         return (len(rules) == 6 and priorities == {0, int(ENDPOINT), int(BYPASS), int(RULE), 32766, 32767}
                 and any(route.get('dst') == 'default' and route.get('dev') == TUN for route in routes)
-                and any(str(rule.get('priority')) == RULE and str(rule.get('table')) == TABLE for rule in rules))
+                and any(str(rule.get('priority')) == RULE and str(rule.get('table')) == TABLE
+                        and 'not' in rule and int(str(rule.get('fwmark', '0')), 0) == MARK
+                        and int(str(rule.get('fwmask', '0xffffffff')), 0) == 0xffffffff
+                        for rule in rules))
 
     def report(self):
         return [asdict(c) for c in self.results]
