@@ -2,9 +2,27 @@ import unittest
 from unittest.mock import Mock, patch
 
 from velum.diagnostics.verification import IPVerifier, Verification
+from velum.network.system import NetworkError
 
 
 class VerificationTests(unittest.TestCase):
+    @patch('velum.diagnostics.verification.resolve_ipv4',
+           side_effect=NetworkError('DNS lookup timed out after 8 seconds'))
+    @patch('velum.diagnostics.verification.IPVerifier.observe')
+    def test_dns_timeout_reports_progress_and_never_claims_connected(self, observe, resolve):
+        runner = Mock()
+        runner.json.return_value = [{'dev': 'vpn0'}]
+        progress = []
+        v = Verification(runner, Mock(), Mock(), Mock(), Mock(),
+                         notify=lambda: progress.append(v.current_check))
+        v.policy_valid = Mock(return_value=True)
+        self.assertFalse(v.run('', expect_change=False))
+        self.assertIn('DNS resolution', progress)
+        self.assertEqual(v.current_check, '')
+        self.assertIn('DNS resolution: DNS lookup timed out', v.failure_detail())
+        self.assertEqual(v.vpn_ip, '')
+        observe.assert_not_called()
+
     def test_fallback_and_no_proxy(self):
         runner = Mock()
         runner.run.side_effect = [RuntimeError(), '8.8.8.8', '8.8.8.8']
@@ -19,7 +37,7 @@ class VerificationTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             IPVerifier(runner).observe()
 
-    @patch('velum.diagnostics.verification.socket.getaddrinfo', return_value=[1])
+    @patch('velum.diagnostics.verification.resolve_ipv4', return_value='8.8.8.8')
     @patch('velum.diagnostics.verification.IPVerifier.observe', return_value='8.8.8.8')
     def test_unchanged_egress_fails(self, observe, dns):
         runner = Mock()
@@ -29,7 +47,7 @@ class VerificationTests(unittest.TestCase):
         self.assertFalse(v.run('8.8.8.8'))
         self.assertTrue(v.run('1.1.1.1'))
 
-    @patch('velum.diagnostics.verification.socket.getaddrinfo', return_value=[1])
+    @patch('velum.diagnostics.verification.resolve_ipv4', return_value='8.8.8.8')
     @patch('velum.diagnostics.verification.IPVerifier.observe', return_value='8.8.8.8')
     def test_no_baseline_still_requires_tunnel_and_https_checks(self, observe, dns):
         runner = Mock()
@@ -46,7 +64,7 @@ class VerificationTests(unittest.TestCase):
         self.assertFalse(v.run('', expect_change=False))
         observe.assert_not_called()
 
-    @patch('velum.diagnostics.verification.socket.getaddrinfo', return_value=[1])
+    @patch('velum.diagnostics.verification.resolve_ipv4', return_value='8.8.8.8')
     def test_wrong_route_fails(self, dns):
         runner = Mock()
         runner.json.return_value = [{'dev': 'wlp2s0'}]

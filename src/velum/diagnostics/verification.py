@@ -1,7 +1,7 @@
 import ipaddress
-import socket
 from dataclasses import asdict, dataclass
 
+from velum.network.system import NetworkError, resolve_ipv4
 from velum.network.tunnel import BYPASS, ENDPOINT, RULE, TABLE, TUN
 from velum.vpn.configuration import MARK
 
@@ -50,19 +50,29 @@ class Check:
 
 
 class Verification:
-    def __init__(self, runner, engine, tunnel, dns, firewall):
+    def __init__(self, runner, engine, tunnel, dns, firewall, notify=lambda: None):
         self.runner, self.engine, self.tunnel = runner, engine, tunnel
         self.dns, self.firewall = dns, firewall
         self.results = []
         self.vpn_ip = ''
+        self.current_check = ''
+        self.notify = notify
+
+    def checking(self, name):
+        self.current_check = name
+        self.notify()
 
     def run(self, original_ip, expect_change=True, hotspot=False):
         self.results = []
         self.vpn_ip = ''
 
         def check(name, test, detail):
+            self.checking(name)
             try:
                 success = bool(test())
+            except NetworkError as exc:
+                success = False
+                detail = str(exc)
             except Exception:  # noqa: S112 - provider failures are aggregated below
                 success = False
             self.results.append(Check(name, 'PASS' if success else 'FAIL', detail))
@@ -78,9 +88,10 @@ class Verification:
         check('Routing policy', self.policy_valid, 'Dedicated default route and policy priorities are intact')
         check('DNS protection', self.dns.verify, 'Resolved stub and tunnel DNS domain are active')
         check('IPv6 protection', self.firewall.verify, 'Owned firewall matches installed protection rules')
-        check('DNS resolution', lambda: bool(socket.getaddrinfo('api.ipify.org', 443, socket.AF_INET)),
+        check('DNS resolution', lambda: bool(resolve_ipv4('api.ipify.org', 443)),
               'System resolver can resolve an external hostname')
         if all(c.status == 'PASS' for c in self.results):
+            self.checking('Internet connectivity (HTTPS checks, up to 24 seconds)')
             try:
                 self.vpn_ip = IPVerifier(self.runner).observe()
                 self.results.append(Check('Internet connectivity', 'PASS', 'Two HTTPS services agree'))
@@ -99,7 +110,13 @@ class Verification:
                   'Laptop forwarding, return route and firewall; verify phone egress separately')
         else:
             self.results.append(Check('Hotspot forwarding', 'NOT ENABLED', 'Disabled'))
+        self.current_check = ''
         return all(c.status in ('PASS', 'NOT ENABLED') for c in self.results)
+
+    def failure_detail(self):
+        failure = next((c for c in self.results if c.status == 'FAIL'), None)
+        return (f'{failure.name}: {failure.detail}' if failure else
+                'Tunnel routing or internet access could not be confirmed')
 
     def policy_valid(self):
         routes = self.runner.json('/usr/bin/ip', '-j', '-4', 'route', 'show', 'table', TABLE)

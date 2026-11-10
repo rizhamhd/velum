@@ -1,5 +1,14 @@
 # Test evidence and release gates
 
+## Bounded verification (2026-11-10)
+
+Regression tests run a deliberately stalled resolver subprocess and confirm it
+is terminated on timeout. Verification tests require a failed DNS result to
+prevent HTTPS/CONNECTED claims, preserve the failure reason, and invoke cleanup
+on initial connection failure. Qt tests cover the current-check display and
+completion after a failed check. Numeric endpoints avoid resolver subprocesses.
+These checks do not establish provider account validity or universal link support.
+
 ## Certificate editor (2026-10-07)
 
 Regression tests exercise editing certificate names on allowInsecure TLS links,

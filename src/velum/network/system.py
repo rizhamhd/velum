@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import re
 import subprocess
@@ -7,6 +8,31 @@ from pathlib import Path
 
 class NetworkError(RuntimeError):
     pass
+
+
+def resolve_ipv4(host, port, timeout=8):
+    """Bound libc/NSS resolution in a disposable process, including on a dead tunnel."""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    if address is not None:
+        if address.version != 4:
+            raise NetworkError('An IPv4-capable endpoint is required')
+        return str(address)
+    try:
+        result = subprocess.run(
+            ['/usr/bin/python', '-I', '-c',
+             'import socket,sys; print(socket.getaddrinfo(sys.argv[1], int(sys.argv[2]), '
+             'socket.AF_INET, socket.SOCK_STREAM)[0][4][0])', host, str(port)],
+            capture_output=True, text=True, check=True, timeout=timeout,
+            env={'PATH': '/usr/bin:/usr/sbin', 'LC_ALL': 'C'})
+        return str(ipaddress.IPv4Address(result.stdout.strip()))
+    except subprocess.TimeoutExpired as exc:
+        raise NetworkError(f'DNS lookup timed out after {timeout} seconds; '
+                           'the connection is not providing working DNS') from exc
+    except (subprocess.SubprocessError, ValueError) as exc:
+        raise NetworkError('DNS lookup failed; no IPv4 address was returned') from exc
 
 
 class Runner:

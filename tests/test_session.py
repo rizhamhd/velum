@@ -13,6 +13,24 @@ from velum.services.session import Session
 
 
 class SessionTests(unittest.TestCase):
+    def test_failed_verification_cleans_up_with_specific_reason(self):
+        from velum.core.state import STEPS
+        from velum.diagnostics.verification import Check
+
+        with tempfile.TemporaryDirectory() as d:
+            session = Session(Path(d), runner=Mock())
+            session.emit = Mock()
+            session.machine.notify = Mock()
+            session.verify = Mock(return_value=False)
+            session.verification.results = [Check('DNS resolution', 'FAIL', 'DNS lookup timed out')]
+            actions = {state: Mock(return_value=True) for state in STEPS}
+            actions[State.VERIFYING] = session.require_verified
+            cleanup = Mock()
+            with self.assertRaisesRegex(RuntimeError, 'DNS resolution: DNS lookup timed out'):
+                session.machine.connect(actions, cleanup)
+            cleanup.assert_called_once()
+            self.assertEqual(session.machine.state, State.DISCONNECTED)
+
     def test_certificate_name_does_not_hide_failed_connection(self):
         for custom_name in ('', '&verifyPeerCertByName=cert.example.invalid'):
             for connected in (False, True):
@@ -30,8 +48,7 @@ class SessionTests(unittest.TestCase):
 
     @patch('velum.services.session.shutil.which', return_value='/usr/bin/tool')
     @patch('velum.services.session.socket.create_connection')
-    @patch('velum.services.session.socket.getaddrinfo',
-           return_value=[(None, None, None, None, ('192.0.2.10', 443))])
+    @patch('velum.services.session.resolve_ipv4', return_value='192.0.2.10')
     @patch('velum.services.session.detect_upstream')
     @patch('velum.services.session.IPVerifier.observe', return_value='8.8.8.8')
     def test_pre_vpn_ip_requests_only_when_comparison_enabled(

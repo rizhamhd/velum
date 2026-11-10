@@ -18,6 +18,23 @@ from velum.config.profiles import ProfileStore
 
 @unittest.skipUnless(QApplication, 'Qt is not installed')
 class GuiTests(unittest.TestCase):
+    def test_verification_shows_waiting_check_then_failure(self):
+        from unittest.mock import Mock
+
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as d:
+            window = Window(store=ProfileStore(Path(d) / 'profiles.json'), client=Mock())
+            window.pending_request = 'connect-test'
+            window.update_status({'state': 'VERIFYING', 'verification_step': 'DNS resolution'})
+            self.assertIn('Checking: DNS resolution', window.summary.text())
+            window.update_status({'state': 'DISCONNECTED', 'request_complete': 'connect-test',
+                                  'error': 'VPN verification failed. DNS lookup timed out'})
+            self.assertIsNone(window.pending_request)
+            self.assertNotIn('Checking:', window.summary.text())
+            self.assertIn('DNS lookup timed out', window.statusBar().currentMessage())
+            window.close()
+            app.processEvents()
+
     def test_import_legacy_link_and_keep_invalid_dialog_open(self):
         from PySide6.QtWidgets import QDialog
 

@@ -76,7 +76,7 @@ With all dependencies already installed, use `makepkg -si` from a source checkou
 or install the prebuilt package:
 
 ```sh
-sudo pacman -U ./velum-vpn-0.1.0-12-any.pkg.tar.zst
+sudo pacman -U ./velum-vpn-0.1.0-15-any.pkg.tar.zst
 sudo systemctl enable --now velum.socket
 velum
 ```

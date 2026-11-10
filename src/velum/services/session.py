@@ -11,7 +11,7 @@ from velum.diagnostics.verification import IPVerifier, Verification
 from velum.network.dns import ResolvedDNS
 from velum.network.firewall import Firewall
 from velum.network.hotspot import Hotspot
-from velum.network.system import NetworkError, Runner, detect_upstream
+from velum.network.system import NetworkError, Runner, detect_upstream, resolve_ipv4
 from velum.network.transaction import Transaction
 from velum.network.tunnel import TUN, Tunnel
 from velum.security.logging import event
@@ -34,7 +34,8 @@ class Session:
         self.dns = ResolvedDNS(self.runner, self.tx)
         self.firewall = Firewall(self.runner, self.guard_tx)
         self.hotspot = Hotspot(self.runner, self.tx)
-        self.verification = Verification(self.runner, self.engine, self.tunnel, self.dns, self.firewall)
+        self.verification = Verification(self.runner, self.engine, self.tunnel, self.dns, self.firewall,
+                                         notify=lambda: self.notify(self.status()))
         self.machine = StateMachine(lambda _: self.emit())
         self.upstream = None
         self.original_ip = ''
@@ -64,6 +65,7 @@ class Session:
                 'hotspot': 'Enabled; phone egress needs verification' if self.hotspot.interface and self.machine.state == State.CONNECTED else 'NOT ENABLED',
                 'checks': self.preflight_checks + self.verification.report(),
                 'engine_version': self.engine_version,
+                'verification_step': self.verification.current_check,
                 'profile_key': sha256(self.profile.original_uri.encode()).hexdigest() if self.profile else '',
                 'settings': self.settings if self.profile else {}}
 
@@ -113,7 +115,7 @@ class Session:
             State.WAITING_FOR_TUN: self.tunnel.wait,
             State.CONFIGURING_ROUTES: self.routes,
             State.CONFIGURING_DNS: self.dns.configure,
-            State.VERIFYING: self.verify,
+            State.VERIFYING: self.require_verified,
         }
         self.machine.connect(actions, self.cleanup)
         self.emit()
@@ -137,10 +139,9 @@ class Session:
         if self.settings.get('hotspot'):
             self.hotspot.preflight(self.settings['hotspot'], self.upstream)
         try:
-            records = socket.getaddrinfo(self.profile.server, self.profile.port, socket.AF_INET, socket.SOCK_STREAM)
-        except socket.gaierror as exc:
-            raise NetworkError('Provider DNS resolution failed; this release needs an IPv4-capable endpoint') from exc
-        self.server = records[0][4][0]
+            self.server = resolve_ipv4(self.profile.server, self.profile.port)
+        except NetworkError as exc:
+            raise NetworkError('Provider DNS resolution failed. ' + str(exc)) from exc
         self.preflight_checks.append({'name': 'Server DNS resolution', 'status': 'PASS',
                                       'detail': 'Provider endpoint resolved to IPv4'})
         start = time.monotonic()
@@ -197,6 +198,11 @@ class Session:
             self.verification.results.append(Check('TLS', status, detail))
         self.emit()
         return result
+
+    def require_verified(self):
+        if not self.verify():
+            raise NetworkError('VPN verification failed. ' + self.verification.failure_detail())
+        return True
 
     def stop_processes(self):
         # Stop packet ingestion first, and attempt both stops even if one fails.

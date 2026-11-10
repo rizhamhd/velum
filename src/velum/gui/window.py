@@ -540,6 +540,8 @@ class Window(QMainWindow):
                              f"Tunnel: {data.get('tunnel', '—')}\n"
                              f"Latency: {data.get('latency_ms', '—')} ms\n"
                              f"Core: {data.get('engine_version', 'Not inspected')}")
+        if state == 'VERIFYING' and data.get('verification_step'):
+            self.summary.setText(self.summary.text() + '\nChecking: ' + data['verification_step'])
         if 'checks' in data:
             self.last_report = data['checks']
             self.diagnostics.setPlainText('\n'.join(

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-15 — Bound DNS checks during connection verification
+
+- Limit provider and tunnel DNS lookups to eight seconds using a disposable
+  resolver process, so an unresponsive tunnel cannot hold verification in libc.
+- Show the current verification check in the window, including the HTTPS probe
+  stage. Failed initial verification reports the failing check before cleanup.
+- Keep routing, firewall, certificate and two-provider HTTPS checks required;
+  preserve existing profiles and protocol settings.
+- Test a stalled resolver process, DNS failure/cleanup, and visible progress.
+
 ## 0.1.0-14 — Prevent recursive routing after Wi-Fi loss
 
 - Exclude marked engine sockets from the tunnel rule even when the main routing
